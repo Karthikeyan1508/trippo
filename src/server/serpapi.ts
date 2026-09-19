@@ -204,6 +204,24 @@ export async function fetchEvents(
   }))
 }
 
+/** A few photos of a place via google_images (cached; [] if no key). */
+export async function fetchPlaceImages(
+  tripId: string,
+  query: string
+): Promise<string[]> {
+  const json = await serpFetch(tripId, "google_images", {
+    q: query,
+    hl: "en",
+    gl: "in",
+  })
+  if (!json) return []
+  const results: any[] = json.images_results ?? []
+  return results
+    .slice(0, 6)
+    .map((r) => r.thumbnail || r.original)
+    .filter((u): u is string => typeof u === "string")
+}
+
 /** Web-search snippet of destination etiquette/tips (cached; "" if no key). */
 export async function fetchTravelTips(
   tripId: string,

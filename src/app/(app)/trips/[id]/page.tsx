@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   BarChart3,
   Route,
+  Clapperboard,
 } from "lucide-react"
 
 import { prisma } from "@/lib/prisma"
@@ -38,6 +39,7 @@ import { PreferenceForm } from "./preference-form"
 import { GroupInsights } from "./group-insights"
 import { ItineraryView } from "./itinerary-view"
 import { ItineraryMap, type MapStop } from "./itinerary-map"
+import { TripStory } from "./trip-story"
 import { GenerateItineraryButton } from "./generate-itinerary-button"
 import { ApprovalPanel } from "./approval-panel"
 import { PrepView } from "./prep-view"
@@ -47,6 +49,7 @@ import { LiveMap } from "./live-map"
 import { AddExpenseDialog } from "./add-expense-dialog"
 import { SettleButton, DeleteExpenseButton } from "./budget-buttons"
 import { computeBalances, settleUp } from "@/lib/budget"
+import { activityIconKey } from "@/lib/trip-icons"
 import type { PreferenceInput } from "@/lib/validators"
 
 function memberInitials(name?: string | null, email?: string | null) {
@@ -189,7 +192,13 @@ export default async function TripPage({
       for (const it of d.items) {
         if (it.lat != null && it.lng != null) {
           n++
-          stops.push({ n, lat: it.lat, lng: it.lng, title: it.title })
+          stops.push({
+            n,
+            lat: it.lat,
+            lng: it.lng,
+            title: it.title,
+            iconKey: activityIconKey(it.category, it.title, it.description),
+          })
           stopNumbers[it.id] = n
         }
       }
@@ -319,6 +328,9 @@ export default async function TripPage({
           </TabsPrimitive.Trigger>
           <TabsPrimitive.Trigger value="itinerary" className={NAV_ITEM}>
             <Route className="size-4 shrink-0" /> Itinerary
+          </TabsPrimitive.Trigger>
+          <TabsPrimitive.Trigger value="story" className={NAV_ITEM}>
+            <Clapperboard className="size-4 shrink-0" /> Story
           </TabsPrimitive.Trigger>
           <TabsPrimitive.Trigger value="prep" className={NAV_ITEM}>
             <ListChecks className="size-4 shrink-0" /> Prep
@@ -456,6 +468,31 @@ export default async function TripPage({
           )}
         </TabsPrimitive.Content>
 
+        {/* Story */}
+        <TabsPrimitive.Content value="story" className="mt-5 space-y-5">
+          <div>
+            <h3 className="font-medium">Visual story</h3>
+            <p className="text-sm text-muted-foreground">
+              A cinematic fly-through of your trip — 3D map, photos of each
+              place, and an AI voice-over.
+            </p>
+          </div>
+          {itinerary ? (
+            <TripStory tripId={trip.id} />
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-16 text-center">
+              <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <Clapperboard className="size-7" />
+              </div>
+              <h3 className="text-lg font-semibold">No story yet</h3>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                Generate an itinerary first — the visual story is built from your
+                located stops.
+              </p>
+            </div>
+          )}
+        </TabsPrimitive.Content>
+
         {/* Prep */}
         <TabsPrimitive.Content value="prep" className="mt-5 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -491,12 +528,6 @@ export default async function TripPage({
                   summary: trip.prep.summary,
                   source: trip.prep.source,
                   etiquette: (trip.prep.etiquette as unknown as string[]) ?? [],
-                  documents: (trip.prep.documents as unknown as string[]) ?? [],
-                  packing:
-                    (trip.prep.packing as unknown as {
-                      category: string
-                      items: string[]
-                    }[]) ?? [],
                   phrases:
                     (trip.prep.phrases as unknown as {
                       phrase: string

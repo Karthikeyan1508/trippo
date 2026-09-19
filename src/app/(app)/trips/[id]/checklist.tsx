@@ -74,7 +74,7 @@ export function Checklist({
   })).filter((g) => g.items.length > 0)
 
   return (
-    <div className="rounded-xl border bg-card p-5">
+    <div className="rounded-2xl border bg-card p-5">
       <div className="flex items-center justify-between">
         <h3 className="font-medium">My checklist</h3>
         <span className="text-sm text-muted-foreground">
@@ -88,8 +88,11 @@ export function Checklist({
           <div key={g.cat}>
             <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               {CATEGORY_LABEL[g.cat] ?? g.cat}
+              <span className="ml-1.5 text-muted-foreground/60">
+                {g.items.filter((i) => i.isDone).length}/{g.items.length}
+              </span>
             </p>
-            <ul className="space-y-1.5">
+            <ul className="grid gap-x-6 gap-y-0.5 sm:grid-cols-2">
               {g.items.map((item) => (
                 <li key={item.id}>
                   <label className="flex cursor-pointer items-center gap-2.5 rounded-md px-1.5 py-1 hover:bg-muted">

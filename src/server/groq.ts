@@ -305,6 +305,106 @@ function normalizePrep(args: any): PrepPack | null {
   }
 }
 
+// ── Cinematic trip narration (voiceover script) ────────────────────────
+
+export type NarrationScene = {
+  day: number
+  title: string
+  placeName?: string | null
+  time?: string | null
+  category: string
+}
+
+export type TripNarration = { intro: string; outro: string; lines: string[] }
+
+const NARRATE_TOOL = {
+  type: "function",
+  function: {
+    name: "narrate_trip",
+    description: "Return a cinematic voiceover script for a trip recap.",
+    parameters: {
+      type: "object",
+      properties: {
+        intro: { type: "string" },
+        outro: { type: "string" },
+        lines: { type: "array", items: { type: "string" } },
+      },
+      required: ["intro", "outro", "lines"],
+    },
+  },
+}
+
+export async function narrateTrip(input: {
+  destination: string
+  days: number
+  tripType: string
+  scenes: NarrationScene[]
+}): Promise<TripNarration | null> {
+  if (!hasGroq()) return null
+  const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b"
+
+  const system = `You are a warm, cinematic travel narrator recording a voiceover for a short trip-recap video.
+Write ONE vivid, flowing sentence per stop (max ~22 words), in second person ("you"), that names the place naturally and evokes the moment.
+Also write a 1-sentence intro that sets the scene and a 1-sentence closing outro.
+Return exactly one line per stop, in order, via the narrate_trip function.`
+
+  const scenesText = input.scenes
+    .map(
+      (s, i) =>
+        `${i + 1}. [Day ${s.day}${s.time ? `, ${s.time}` : ""}] ${s.title}${
+          s.placeName && s.placeName !== s.title ? ` (${s.placeName})` : ""
+        }`
+    )
+    .join("\n")
+
+  const body: Record<string, unknown> = {
+    model,
+    temperature: 0.7,
+    max_tokens: 4000,
+    ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
+    messages: [
+      { role: "system", content: system },
+      {
+        role: "user",
+        content: `A ${input.days}-day ${input.tripType.toLowerCase()} trip to ${input.destination}. Narrate these ${input.scenes.length} stops in order:\n${scenesText}`,
+      },
+    ],
+    tools: [NARRATE_TOOL],
+    tool_choice: { type: "function", function: { name: "narrate_trip" } },
+  }
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      console.error("Groq narrate error:", res.status, await res.text())
+      return null
+    }
+    const json = await res.json()
+    const call = json?.choices?.[0]?.message?.tool_calls?.[0]
+    if (!call?.function?.arguments) return null
+    const args = JSON.parse(call.function.arguments)
+    const lines: string[] = Array.isArray(args.lines)
+      ? args.lines.map((l: unknown) => String(l))
+      : []
+    return {
+      intro: typeof args.intro === "string" ? args.intro : "",
+      outro: typeof args.outro === "string" ? args.outro : "",
+      lines,
+    }
+  } catch (err) {
+    console.error("Groq narrate request failed:", err)
+    return null
+  }
+}
+
 export async function generatePrepWithGroq(
   ctx: PrepContext
 ): Promise<PrepPack | null> {

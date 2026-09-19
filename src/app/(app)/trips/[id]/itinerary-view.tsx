@@ -1,30 +1,9 @@
-import {
-  Plane,
-  BedDouble,
-  Utensils,
-  MapPin,
-  ShoppingBag,
-  PartyPopper,
-  Sparkles,
-  Star,
-  ExternalLink,
-} from "lucide-react"
+import { Sparkles, Star, ExternalLink } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
-
-const CATEGORY: Record<
-  string,
-  { icon: React.ComponentType<{ className?: string }>; className: string }
-> = {
-  TRAVEL: { icon: Plane, className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-  STAY: { icon: BedDouble, className: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
-  FOOD: { icon: Utensils, className: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
-  ACTIVITY: { icon: MapPin, className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
-  SHOPPING: { icon: ShoppingBag, className: "bg-pink-500/10 text-pink-600 dark:text-pink-400" },
-  EVENT: { icon: PartyPopper, className: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400" },
-  OTHER: { icon: Sparkles, className: "bg-muted text-muted-foreground" },
-}
+import { activityIconKey, activityLabel, categoryColor } from "@/lib/trip-icons"
+import { ActivityIcon } from "@/components/activity-icon"
 
 type Item = {
   id: string
@@ -62,54 +41,95 @@ export function ItineraryView({
   stopNumbers?: Record<string, number>
 }) {
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border bg-card p-5">
-        <div className="flex items-start justify-between gap-3">
+    <div className="space-y-5">
+      {itinerary.summary && (
+        <div className="flex items-start justify-between gap-3 rounded-2xl border bg-card p-5">
           <p className="text-sm text-muted-foreground">{itinerary.summary}</p>
-          <Badge variant={itinerary.source === "AI" ? "default" : "secondary"}>
+          <Badge
+            variant={itinerary.source === "AI" ? "default" : "secondary"}
+            className="shrink-0"
+          >
             {itinerary.source === "AI" ? "AI plan" : "Sample"}
           </Badge>
         </div>
-      </div>
+      )}
 
       {itinerary.days.map((day) => (
-        <div key={day.id} className="rounded-xl border bg-card">
-          <div className="flex items-baseline gap-3 border-b px-5 py-3">
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-              {day.dayNumber}
+        <div key={day.id} className="overflow-hidden rounded-2xl border bg-card">
+          {/* Day header */}
+          <div className="flex items-center gap-3 border-b bg-muted/40 px-5 py-3">
+            <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+              Day {day.dayNumber}
             </span>
-            <div>
-              <h4 className="font-medium">{day.title ?? `Day ${day.dayNumber}`}</h4>
+            <div className="min-w-0">
+              <h4 className="truncate text-sm font-semibold">
+                {day.title ?? `Day ${day.dayNumber}`}
+              </h4>
               {day.date && (
                 <p className="text-xs text-muted-foreground">
                   {format(day.date, "EEEE, d MMM")}
                 </p>
               )}
             </div>
+            <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+              {day.items.length} {day.items.length === 1 ? "stop" : "stops"}
+            </span>
           </div>
 
-          <ul className="divide-y">
-            {day.items.map((item) => {
-              const cat = CATEGORY[item.category] ?? CATEGORY.OTHER
-              const Icon = cat.icon
+          {/* Timeline */}
+          <ol className="px-5 py-4">
+            {day.items.map((item, idx) => {
+              const num = stopNumbers?.[item.id]
+              const iconKey = activityIconKey(
+                item.category,
+                item.title,
+                item.description
+              )
+              const isLast = idx === day.items.length - 1
               return (
-                <li key={item.id} className="flex gap-3 px-5 py-3.5">
-                  {stopNumbers?.[item.id] != null && (
-                    <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-                      {stopNumbers[item.id]}
-                    </span>
+                <li key={item.id} className="relative flex gap-4 pb-5 last:pb-0">
+                  {!isLast && (
+                    <span
+                      aria-hidden
+                      className="absolute top-9 bottom-0 left-4 w-px -translate-x-1/2 bg-border"
+                    />
                   )}
-                  <div className="w-12 shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground">
-                    {item.startTime ?? ""}
-                  </div>
-                  <div
-                    className={`grid size-8 shrink-0 place-items-center rounded-lg ${cat.className}`}
+
+                  {/* Marker */}
+                  <span
+                    className={`relative z-10 grid size-8 shrink-0 place-items-center rounded-full ring-4 ring-card ${categoryColor(
+                      item.category
+                    )}`}
                   >
-                    <Icon className="size-4" />
-                  </div>
+                    <ActivityIcon iconKey={iconKey} className="size-4" />
+                    {num != null && (
+                      <span className="absolute -top-1.5 -right-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground ring-2 ring-card">
+                        {num}
+                      </span>
+                    )}
+                  </span>
+
+                  {/* Content */}
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span className="font-medium">{item.title}</span>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {item.startTime && (
+                        <span className="font-medium tabular-nums text-foreground">
+                          {item.startTime}
+                        </span>
+                      )}
+                      <span>
+                        {activityLabel(
+                          item.category,
+                          item.title,
+                          item.description
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="font-medium leading-snug">
+                        {item.title}
+                      </span>
                       {item.rating != null && (
                         <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
                           <Star className="size-3 fill-amber-400 text-amber-400" />
@@ -121,13 +141,14 @@ export function ItineraryView({
                           href={item.sourceUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground"
+                          className="text-muted-foreground hover:text-primary"
                           aria-label="Open source"
                         >
                           <ExternalLink className="size-3.5" />
                         </a>
                       )}
                     </div>
+
                     {item.placeName && item.placeName !== item.title && (
                       <p className="text-sm text-muted-foreground">
                         {item.placeName}
@@ -139,15 +160,16 @@ export function ItineraryView({
                       </p>
                     )}
                     {item.why && (
-                      <p className="mt-1 text-xs text-muted-foreground/80 italic">
-                        {item.why}
+                      <p className="mt-1.5 flex items-start gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
+                        <Sparkles className="mt-0.5 size-3 shrink-0 text-primary" />
+                        <span>{item.why}</span>
                       </p>
                     )}
                   </div>
                 </li>
               )
             })}
-          </ul>
+          </ol>
         </div>
       ))}
 

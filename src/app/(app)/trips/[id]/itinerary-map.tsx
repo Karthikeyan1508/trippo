@@ -4,7 +4,15 @@ import * as React from "react"
 import type * as LeafletNS from "leaflet"
 import { MapPinned } from "lucide-react"
 
-export type MapStop = { n: number; lat: number; lng: number; title: string }
+import { activityIconSvg } from "@/components/activity-icon"
+
+export type MapStop = {
+  n: number
+  lat: number
+  lng: number
+  title: string
+  iconKey: string
+}
 
 function escapeHtml(s: string) {
   return s.replace(/[&<>"]/g, (c) =>
@@ -45,9 +53,13 @@ export function ItineraryMap({ stops }: { stops: MapStop[] }) {
         latlngs.push([s.lat, s.lng])
         const icon = L.divIcon({
           className: "",
-          html: `<div class="tp-num">${s.n}</div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
+          html: `<div class="tp-stop">${activityIconSvg(s.iconKey, {
+            color: "#ffffff",
+            size: 16,
+            strokeWidth: 2.25,
+          })}<span class="tp-n">${s.n}</span></div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
         })
         L.marker([s.lat, s.lng], { icon })
           .addTo(map)
@@ -84,7 +96,9 @@ export function ItineraryMap({ stops }: { stops: MapStop[] }) {
   return (
     <>
       <style>{`
-        .tp-num{width:28px;height:28px;border-radius:9999px;background:var(--primary);color:var(--primary-foreground);display:grid;place-items:center;font-weight:600;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+        .tp-stop{position:relative;width:32px;height:32px;border-radius:9999px;background:var(--primary);border:2px solid #fff;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.35)}
+        .tp-stop svg{width:16px;height:16px}
+        .tp-n{position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:9999px;background:#fff;color:var(--primary);font-size:10px;font-weight:700;display:grid;place-items:center;border:1.5px solid var(--primary)}
         .leaflet-container{font:inherit}
       `}</style>
       <div
