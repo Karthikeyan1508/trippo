@@ -57,26 +57,30 @@ export function ApprovalControls({
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-col gap-2 sm:flex-row">
       <Button
         onClick={approve}
-        disabled={pending}
-        variant={myStatus === "APPROVED" ? "default" : "outline"}
-        className="gap-1.5"
+        disabled={pending || myStatus === "APPROVED"}
+        variant={myStatus === "APPROVED" ? "outline" : "default"}
+        className={
+          myStatus === "APPROVED"
+            ? "flex-1 gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 disabled:opacity-100 dark:text-emerald-400 dark:hover:text-emerald-400"
+            : "flex-1 gap-1.5"
+        }
       >
         {pending ? (
           <Loader2 className="size-4 animate-spin" />
         ) : (
           <Check className="size-4" />
         )}
-        {myStatus === "APPROVED" ? "Approved" : "Approve"}
+        {myStatus === "APPROVED" ? "You approved" : "Approve plan"}
       </Button>
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogTrigger asChild>
           <Button
             variant={myStatus === "REJECTED" ? "destructive" : "outline"}
-            className="gap-1.5"
+            className="flex-1 gap-1.5"
             disabled={pending}
           >
             <X className="size-4" />
