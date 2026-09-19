@@ -373,7 +373,7 @@ export default async function TripPage({
 
         <SidebarInset className="min-w-0">
           {/* Sticky trip header */}
-          <header className="sticky top-0 z-20 flex h-[4.5rem] shrink-0 flex-col justify-center gap-1 border-b bg-background/85 px-4 backdrop-blur lg:px-6">
+          <header className="sticky top-0 z-30 flex h-[4.5rem] shrink-0 flex-col justify-center gap-1 border-b bg-background/95 px-4 backdrop-blur lg:px-6">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="-ml-1" />
               <Separator orientation="vertical" className="mr-0.5 !h-5" />
