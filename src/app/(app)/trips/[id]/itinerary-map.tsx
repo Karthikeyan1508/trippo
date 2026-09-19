@@ -1,0 +1,96 @@
+"use client"
+
+import * as React from "react"
+import type * as LeafletNS from "leaflet"
+import { MapPinned } from "lucide-react"
+
+export type MapStop = { n: number; lat: number; lng: number; title: string }
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string
+  )
+}
+
+export function ItineraryMap({ stops }: { stops: MapStop[] }) {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const mapRef = React.useRef<LeafletNS.Map | null>(null)
+
+  React.useEffect(() => {
+    if (stops.length === 0) return
+    let cancelled = false
+
+    async function init() {
+      if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link")
+        link.id = "leaflet-css"
+        link.rel = "stylesheet"
+        link.href =
+          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+        document.head.appendChild(link)
+      }
+      const mod = await import("leaflet")
+      const L = ((mod as unknown as { default?: typeof LeafletNS }).default ??
+        mod) as typeof LeafletNS
+      if (cancelled || !containerRef.current || mapRef.current) return
+
+      const map = L.map(containerRef.current, { scrollWheelZoom: false })
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+        maxZoom: 19,
+      }).addTo(map)
+
+      const latlngs: [number, number][] = []
+      for (const s of stops) {
+        latlngs.push([s.lat, s.lng])
+        const icon = L.divIcon({
+          className: "",
+          html: `<div class="tp-num">${s.n}</div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        })
+        L.marker([s.lat, s.lng], { icon })
+          .addTo(map)
+          .bindPopup(`<b>${s.n}.</b> ${escapeHtml(s.title)}`)
+      }
+
+      if (latlngs.length === 1) {
+        map.setView(latlngs[0], 13)
+      } else {
+        map.fitBounds(L.latLngBounds(latlngs).pad(0.2))
+      }
+      mapRef.current = map
+    }
+
+    init()
+    return () => {
+      cancelled = true
+      mapRef.current?.remove()
+      mapRef.current = null
+    }
+  }, [stops])
+
+  if (stops.length === 0) {
+    return (
+      <div className="flex h-[300px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-card/50 text-center lg:h-[560px]">
+        <MapPinned className="size-7 text-muted-foreground" />
+        <p className="max-w-[15rem] text-sm text-muted-foreground">
+          The map fills in once the plan includes located places.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <style>{`
+        .tp-num{width:28px;height:28px;border-radius:9999px;background:var(--primary);color:var(--primary-foreground);display:grid;place-items:center;font-weight:600;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+        .leaflet-container{font:inherit}
+      `}</style>
+      <div
+        ref={containerRef}
+        className="z-0 h-[320px] w-full overflow-hidden rounded-xl border bg-muted lg:h-[560px]"
+      />
+    </>
+  )
+}

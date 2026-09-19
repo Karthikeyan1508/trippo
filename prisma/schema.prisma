@@ -1,0 +1,458 @@
+// Trip Planner — Prisma schema
+// Prisma 7 (query compiler + driver adapters). CLI uses DIRECT_URL for
+// migrations; the runtime client connects via the pg driver adapter.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────
+// Auth.js (NextAuth) models
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+
+  accounts      Account[]
+  sessions      Session[]
+  memberships   TripMember[]
+  createdTrips  Trip[]          @relation("TripCreator")
+  sentInvites   Invite[]        @relation("InviteSender")
+  approvals     Approval[]
+  checklistItems ChecklistItem[]
+  locations     MemberLocation[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Trip domain
+// ─────────────────────────────────────────────────────────────
+
+model Trip {
+  id              String     @id @default(cuid())
+  name            String
+  destination     String
+  originCity      String?
+  startDate       DateTime
+  endDate         DateTime
+  tripType        TripType   @default(LEISURE)
+  budgetPerPerson Int?
+  currency        String     @default("INR")
+  status          TripStatus @default(PLANNING)
+  createdById     String
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  createdBy   User            @relation("TripCreator", fields: [createdById], references: [id])
+  members     TripMember[]
+  invites     Invite[]
+  itineraries Itinerary[]
+  research    ResearchQuery[]
+  prep        PrepGuide?
+  checklist   ChecklistItem[]
+  locations   MemberLocation[]
+  checkpoints Checkpoint[]
+  expenses    Expense[]
+  settlements Settlement[]
+
+  @@index([createdById])
+}
+
+model TripMember {
+  id       String       @id @default(cuid())
+  tripId   String
+  userId   String
+  role     Role         @default(MEMBER)
+  status   MemberStatus @default(ACTIVE)
+  joinedAt DateTime     @default(now())
+
+  trip       Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preference Preference?
+
+  @@unique([tripId, userId])
+  @@index([userId])
+}
+
+model Invite {
+  id           String       @id @default(cuid())
+  tripId       String
+  email        String
+  token        String       @unique @default(cuid())
+  role         Role         @default(MEMBER)
+  status       InviteStatus @default(PENDING)
+  invitedById  String
+  createdAt    DateTime     @default(now())
+  expiresAt    DateTime
+
+  trip      Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  invitedBy User @relation("InviteSender", fields: [invitedById], references: [id])
+
+  @@index([tripId])
+  @@index([email])
+}
+
+model Preference {
+  id              String   @id @default(cuid())
+  tripMemberId    String   @unique
+  age             Int?
+  gender          String?
+  diet            Diet?
+  stayTypes       String[]
+  transports      String[]
+  interests       String[]
+  pace            Pace?
+  budgetPerDay    Int?
+  accessibility   String?
+  mustCoverPlaces String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tripMember TripMember @relation(fields: [tripMemberId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Research cache + AI itinerary
+// ─────────────────────────────────────────────────────────────
+
+// Cache of SerpApi responses so we never spend a credit twice.
+model ResearchQuery {
+  id        String   @id @default(cuid())
+  tripId    String
+  engine    String
+  queryKey  String
+  params    Json
+  response  Json
+  fetchedAt DateTime @default(now())
+  expiresAt DateTime
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, engine, queryKey])
+  @@index([tripId])
+}
+
+model Itinerary {
+  id          String          @id @default(cuid())
+  tripId      String
+  version     Int             @default(1)
+  status      ItineraryStatus @default(DRAFT)
+  source      String          @default("AI") // AI | SAMPLE
+  model       String?
+  summary     String?
+  generatedAt DateTime        @default(now())
+  createdById String?
+
+  trip      Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  days      ItineraryDay[]
+  approvals Approval[]
+
+  @@index([tripId])
+}
+
+model Approval {
+  id          String         @id @default(cuid())
+  itineraryId String
+  userId      String
+  status      ApprovalStatus @default(PENDING)
+  reason      String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  itinerary Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([itineraryId, userId])
+  @@index([itineraryId])
+}
+
+model ItineraryDay {
+  id          String    @id @default(cuid())
+  itineraryId String
+  dayNumber   Int
+  date        DateTime?
+  title       String?
+  summary     String?
+
+  itinerary Itinerary       @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  items     ItineraryItem[]
+
+  @@index([itineraryId])
+}
+
+model ItineraryItem {
+  id           String       @id @default(cuid())
+  dayId        String
+  order        Int
+  startTime    String?
+  endTime      String?
+  title        String
+  description  String?
+  category     ItemCategory @default(ACTIVITY)
+  placeName    String?
+  address      String?
+  lat          Float?
+  lng          Float?
+  rating       Float?
+  priceLevel   String?
+  sourceEngine String?
+  sourceUrl    String?
+  why          String?
+
+  day ItineraryDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+
+  @@index([dayId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MEMBER
+  OBSERVER
+}
+
+enum MemberStatus {
+  INVITED
+  ACTIVE
+  DECLINED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum TripType {
+  LEISURE
+  ADVENTURE
+  PILGRIMAGE
+  PARTY
+  WORKATION
+}
+
+enum TripStatus {
+  PLANNING
+  VOTING
+  CONFIRMED
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum Diet {
+  VEG
+  NON_VEG
+  VEGAN
+  JAIN
+  EGGETARIAN
+}
+
+enum Pace {
+  RELAXED
+  PACKED
+}
+
+enum ItineraryStatus {
+  DRAFT
+  FINAL
+}
+
+enum ItemCategory {
+  TRAVEL
+  STAY
+  FOOD
+  ACTIVITY
+  SHOPPING
+  EVENT
+  OTHER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model PrepGuide {
+  id          String   @id @default(cuid())
+  tripId      String   @unique
+  summary     String?
+  etiquette   Json
+  documents   Json
+  packing     Json
+  phrases     Json?
+  source      String   @default("AI")
+  model       String?
+  generatedAt DateTime @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+}
+
+model ChecklistItem {
+  id        String            @id @default(cuid())
+  tripId    String
+  userId    String
+  label     String
+  category  ChecklistCategory @default(OTHER)
+  isDone    Boolean           @default(false)
+  order     Int               @default(0)
+  createdAt DateTime          @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, userId])
+}
+
+enum ChecklistCategory {
+  DOCUMENT
+  PACKING
+  BOOKING
+  GEAR
+  OTHER
+}
+
+model MemberLocation {
+  id        String   @id @default(cuid())
+  tripId    String
+  userId    String
+  lat       Float
+  lng       Float
+  accuracy  Float?
+  updatedAt DateTime @updatedAt
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId])
+  @@index([tripId])
+}
+
+model Checkpoint {
+  id          String         @id @default(cuid())
+  tripId      String
+  name        String
+  lat         Float
+  lng         Float
+  type        CheckpointType @default(POINT)
+  createdById String?
+  order       Int            @default(0)
+  createdAt   DateTime       @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+
+enum CheckpointType {
+  POINT
+  STAY
+  FOOD
+  MEETING
+  DANGER
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  tripId      String
+  description String
+  amount      Float
+  category    ExpenseCategory @default(MISC)
+  paidById    String
+  splitType   SplitType       @default(EQUAL)
+  createdById String?
+  createdAt   DateTime        @default(now())
+
+  trip   Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  shares ExpenseShare[]
+
+  @@index([tripId])
+}
+
+model ExpenseShare {
+  id        String @id @default(cuid())
+  expenseId String
+  userId    String
+  amount    Float
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, userId])
+  @@index([userId])
+}
+
+model Settlement {
+  id         String   @id @default(cuid())
+  tripId     String
+  fromUserId String
+  toUserId   String
+  amount     Float
+  createdAt  DateTime @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+}
+
+enum ExpenseCategory {
+  FOOD
+  STAY
+  TRANSPORT
+  ACTIVITY
+  SHOPPING
+  MISC
+}
+
+enum SplitType {
+  EQUAL
+  CUSTOM
+}
