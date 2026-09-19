@@ -494,7 +494,7 @@ export default async function TripPage({
 
           {itinerary ? (
             <>
-              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_480px] lg:items-start">
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_600px] lg:items-start">
                 <div className="min-w-0 space-y-5">
                   <ItineraryView
                     itinerary={itinerary}
