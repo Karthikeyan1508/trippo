@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import {
-  ArrowLeft,
   CalendarDays,
   MapPin,
   PlaneTakeoff,
@@ -19,6 +18,8 @@ import {
   BarChart3,
   Route,
   Clapperboard,
+  Compass,
+  type LucideIcon,
 } from "lucide-react"
 
 import { prisma } from "@/lib/prisma"
@@ -32,7 +33,25 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Separator } from "@/components/ui/separator"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar"
 import { Tabs as TabsPrimitive } from "radix-ui"
+import { NavUser } from "./nav-user"
 import { InviteDialog } from "./invite-dialog"
 import { RevokeInviteButton } from "./revoke-invite-button"
 import { PreferenceForm } from "./preference-form"
@@ -61,9 +80,6 @@ function memberInitials(name?: string | null, email?: string | null) {
     .join("")
     .toUpperCase()
 }
-
-const NAV_ITEM =
-  "group flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:bg-primary/10 data-[state=active]:text-primary lg:w-full"
 
 const ROADMAP = [
   {
@@ -269,96 +285,145 @@ export default async function TripPage({
 
   const filledCount = trip.members.filter((m) => m.preference).length
 
-  return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-8">
-      <Button asChild variant="ghost" size="sm" className="mb-4 gap-1.5">
-        <Link href="/dashboard">
-          <ArrowLeft className="size-4" />
-          All trips
-        </Link>
-      </Button>
+  const navItems: {
+    value: string
+    label: string
+    icon: LucideIcon
+    badge?: number
+  }[] = [
+    { value: "overview", label: "Overview", icon: LayoutDashboard },
+    { value: "itinerary", label: "Itinerary", icon: Route },
+    { value: "story", label: "Story", icon: Clapperboard },
+    { value: "prep", label: "Prep", icon: ListChecks },
+    { value: "live", label: "Live map", icon: MapIcon },
+    { value: "budget", label: "Budget", icon: Wallet },
+    {
+      value: "members",
+      label: "Members",
+      icon: Users,
+      badge: trip.members.length,
+    },
+    { value: "preferences", label: "My preferences", icon: SlidersHorizontal },
+    ...(isAdmin
+      ? [{ value: "insights", label: "Group insights", icon: BarChart3 }]
+      : []),
+  ]
 
-      {/* Trip header */}
-      <div className="rounded-2xl border bg-card p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">
+  return (
+    <TabsPrimitive.Root
+      defaultValue="overview"
+      orientation="vertical"
+      className="contents"
+    >
+      <SidebarProvider>
+        <Sidebar collapsible="icon">
+          <SidebarHeader>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton size="lg" asChild>
+                  <Link href="/dashboard">
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                      <Compass className="size-4" />
+                    </div>
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-semibold">Trippo</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        All trips
+                      </span>
+                    </div>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarHeader>
+
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel>Plan</SidebarGroupLabel>
+              <TabsPrimitive.List asChild>
+                <SidebarMenu>
+                  {navItems.map((item) => (
+                    <SidebarMenuItem key={item.value}>
+                      <TabsPrimitive.Trigger value={item.value} asChild>
+                        <SidebarMenuButton
+                          title={item.label}
+                          className="data-[state=active]:bg-sidebar-accent data-[state=active]:font-medium data-[state=active]:text-sidebar-accent-foreground"
+                        >
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </TabsPrimitive.Trigger>
+                      {item.badge != null && (
+                        <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>
+                      )}
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </TabsPrimitive.List>
+            </SidebarGroup>
+          </SidebarContent>
+
+          <SidebarFooter>
+            <NavUser
+              user={{ name: user.name, email: user.email, image: user.image }}
+            />
+          </SidebarFooter>
+          <SidebarRail />
+        </Sidebar>
+
+        <SidebarInset className="min-w-0">
+          {/* Sticky trip header */}
+          <header className="sticky top-0 z-20 flex h-[4.5rem] shrink-0 flex-col justify-center gap-1 border-b bg-background/85 px-4 backdrop-blur lg:px-6">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="-ml-1" />
+              <Separator orientation="vertical" className="mr-0.5 !h-5" />
+              <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">
                 {trip.name}
               </h1>
-              <Badge variant="secondary">{prettifyEnum(trip.status)}</Badge>
-              <Badge variant="outline">{prettifyEnum(trip.tripType)}</Badge>
+              <Badge
+                variant="secondary"
+                className="hidden shrink-0 sm:inline-flex"
+              >
+                {prettifyEnum(trip.status)}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="hidden shrink-0 md:inline-flex"
+              >
+                {prettifyEnum(trip.tripType)}
+              </Badge>
+              {isAdmin && (
+                <div className="ml-auto shrink-0">
+                  <InviteDialog tripId={trip.id} />
+                </div>
+              )}
             </div>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 pl-8 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
-                <MapPin className="size-4" />
+                <MapPin className="size-3.5" />
                 {trip.destination}
               </span>
               {trip.originCity && (
-                <span className="flex items-center gap-1.5">
-                  <PlaneTakeoff className="size-4" />
+                <span className="hidden items-center gap-1.5 sm:flex">
+                  <PlaneTakeoff className="size-3.5" />
                   from {trip.originCity}
                 </span>
               )}
               <span className="flex items-center gap-1.5">
-                <CalendarDays className="size-4" />
+                <CalendarDays className="size-3.5" />
                 {formatDateRange(trip.startDate, trip.endDate)} · {days} days
               </span>
               {trip.budgetPerPerson != null && (
-                <span className="flex items-center gap-1.5">
-                  <Wallet className="size-4" />
+                <span className="hidden items-center gap-1.5 sm:flex">
+                  <Wallet className="size-3.5" />
                   {formatMoney(trip.budgetPerPerson, trip.currency)}/person
                 </span>
               )}
             </div>
-          </div>
-          {isAdmin && <InviteDialog tripId={trip.id} />}
-        </div>
-      </div>
+          </header>
 
-      {/* Sidebar navigation + content */}
-      <TabsPrimitive.Root
-        defaultValue="overview"
-        orientation="vertical"
-        className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start"
-      >
-        <TabsPrimitive.List className="flex gap-1 overflow-x-auto rounded-xl border bg-card p-2 lg:sticky lg:top-20 lg:w-56 lg:shrink-0 lg:flex-col lg:overflow-visible">
-          <TabsPrimitive.Trigger value="overview" className={NAV_ITEM}>
-            <LayoutDashboard className="size-4 shrink-0" /> Overview
-          </TabsPrimitive.Trigger>
-          <TabsPrimitive.Trigger value="itinerary" className={NAV_ITEM}>
-            <Route className="size-4 shrink-0" /> Itinerary
-          </TabsPrimitive.Trigger>
-          <TabsPrimitive.Trigger value="story" className={NAV_ITEM}>
-            <Clapperboard className="size-4 shrink-0" /> Story
-          </TabsPrimitive.Trigger>
-          <TabsPrimitive.Trigger value="prep" className={NAV_ITEM}>
-            <ListChecks className="size-4 shrink-0" /> Prep
-          </TabsPrimitive.Trigger>
-          <TabsPrimitive.Trigger value="live" className={NAV_ITEM}>
-            <MapIcon className="size-4 shrink-0" /> Live map
-          </TabsPrimitive.Trigger>
-          <TabsPrimitive.Trigger value="budget" className={NAV_ITEM}>
-            <Wallet className="size-4 shrink-0" /> Budget
-          </TabsPrimitive.Trigger>
-          <TabsPrimitive.Trigger value="members" className={NAV_ITEM}>
-            <Users className="size-4 shrink-0" /> Members
-            <span className="ml-auto rounded bg-muted px-1.5 text-xs group-data-[state=active]:bg-primary/15">
-              {trip.members.length}
-            </span>
-          </TabsPrimitive.Trigger>
-          <TabsPrimitive.Trigger value="preferences" className={NAV_ITEM}>
-            <SlidersHorizontal className="size-4 shrink-0" /> My preferences
-          </TabsPrimitive.Trigger>
-          {isAdmin && (
-            <TabsPrimitive.Trigger value="insights" className={NAV_ITEM}>
-              <BarChart3 className="size-4 shrink-0" /> Group insights
-            </TabsPrimitive.Trigger>
-          )}
-        </TabsPrimitive.List>
-
-        <div className="min-w-0 flex-1 space-y-0">
-          {/* content */}
+          <div className="min-w-0 flex-1 px-4 pb-10 lg:px-6">
+            {/* content */}
 
         {/* Overview */}
         <TabsPrimitive.Content value="overview" className="mt-5 space-y-6">
@@ -830,8 +895,9 @@ export default async function TripPage({
             />
           </TabsPrimitive.Content>
         )}
-        </div>
-      </TabsPrimitive.Root>
-    </div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </TabsPrimitive.Root>
   )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { LayoutDashboard, LogOut } from "lucide-react"
 
 import { Logo } from "@/components/logo"
@@ -33,6 +34,13 @@ function initials(user: HeaderUser) {
 }
 
 export function AppHeader({ user }: { user: HeaderUser }) {
+  const pathname = usePathname()
+
+  // Trip detail pages render their own full-height sidebar chrome
+  // (with the profile menu in the sidebar footer), so the global
+  // header would just be a redundant second bar.
+  if (/^\/trips\/[^/]+/.test(pathname)) return null
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
