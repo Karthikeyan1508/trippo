@@ -337,29 +337,24 @@ export default async function TripPage({
             </SidebarMenu>
           </SidebarHeader>
 
-          <SidebarContent className="px-2 py-2">
-            <SidebarGroup className="px-2">
-              <SidebarGroupLabel className="px-2 text-xs tracking-wide">
-                Plan
-              </SidebarGroupLabel>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel>Plan</SidebarGroupLabel>
               <TabsPrimitive.List asChild>
                 <SidebarMenu className="gap-1.5">
                   {navItems.map((item) => (
                     <SidebarMenuItem key={item.value}>
                       <TabsPrimitive.Trigger value={item.value} asChild>
                         <SidebarMenuButton
-                          size="lg"
                           title={item.label}
-                          className="relative gap-3 rounded-lg text-[0.95rem] [&_svg]:size-5! data-[state=active]:bg-primary/10 data-[state=active]:font-semibold data-[state=active]:text-primary data-[state=active]:hover:bg-primary/15 data-[state=active]:hover:text-primary data-[state=active]:before:absolute data-[state=active]:before:inset-y-2 data-[state=active]:before:left-0 data-[state=active]:before:w-1 data-[state=active]:before:rounded-full data-[state=active]:before:bg-primary data-[state=active]:before:content-['']"
+                          className="h-9 data-[state=active]:bg-sidebar-accent data-[state=active]:font-medium data-[state=active]:text-sidebar-accent-foreground"
                         >
                           <item.icon />
                           <span>{item.label}</span>
                         </SidebarMenuButton>
                       </TabsPrimitive.Trigger>
                       {item.badge != null && (
-                        <SidebarMenuBadge className="peer-data-[size=lg]/menu-button:top-3.5 text-primary">
-                          {item.badge}
-                        </SidebarMenuBadge>
+                        <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>
                       )}
                     </SidebarMenuItem>
                   ))}
