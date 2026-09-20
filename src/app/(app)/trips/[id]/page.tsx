@@ -51,6 +51,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Tabs as TabsPrimitive } from "radix-ui"
+import { NavMenuButton } from "./nav-menu-button"
 import { NavUser } from "./nav-user"
 import { InviteDialog } from "./invite-dialog"
 import { RevokeInviteButton } from "./revoke-invite-button"
@@ -68,6 +69,7 @@ import { LiveMap } from "./live-map"
 import { AddExpenseDialog } from "./add-expense-dialog"
 import { SettleButton, DeleteExpenseButton } from "./budget-buttons"
 import { computeBalances, settleUp } from "@/lib/budget"
+import { expenseIcon } from "./expense-icons"
 import { activityIconKey } from "@/lib/trip-icons"
 import type { PreferenceInput } from "@/lib/validators"
 
@@ -259,14 +261,6 @@ export default async function TripPage({
   const totalSpent = expenses.reduce((a, e) => a + e.amount, 0)
   const myBalance = balances[user.id] ?? 0
 
-  const EXPENSE_EMOJI: Record<string, string> = {
-    FOOD: "🍽️",
-    STAY: "🏨",
-    TRANSPORT: "🚕",
-    ACTIVITY: "🎟️",
-    SHOPPING: "🛍️",
-    MISC: "📦",
-  }
   const days = tripDurationDays(trip.startDate, trip.endDate)
   const p = myMember.preference
 
@@ -345,13 +339,13 @@ export default async function TripPage({
                   {navItems.map((item) => (
                     <SidebarMenuItem key={item.value}>
                       <TabsPrimitive.Trigger value={item.value} asChild>
-                        <SidebarMenuButton
+                        <NavMenuButton
                           title={item.label}
                           className="h-9 data-[state=active]:bg-sidebar-accent data-[state=active]:font-medium data-[state=active]:text-sidebar-accent-foreground"
                         >
                           <item.icon />
                           <span>{item.label}</span>
-                        </SidebarMenuButton>
+                        </NavMenuButton>
                       </TabsPrimitive.Trigger>
                       {item.badge != null && (
                         <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>
@@ -729,8 +723,9 @@ export default async function TripPage({
             </div>
           ) : (
             expenses.length > 0 && (
-              <div className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">
-                Everyone&apos;s settled up. 🎉
+              <div className="flex items-center gap-2 rounded-xl border bg-card p-5 text-sm text-muted-foreground">
+                <CheckCircle2 className="size-4 text-emerald-500" />
+                Everyone&apos;s settled up.
               </div>
             )
           )}
@@ -745,10 +740,12 @@ export default async function TripPage({
               </p>
             ) : (
               <ul className="divide-y">
-                {expenses.map((e) => (
+                {expenses.map((e) => {
+                  const Icon = expenseIcon(e.category)
+                  return (
                   <li key={e.id} className="flex items-center gap-3 px-5 py-3">
-                    <span className="text-lg">
-                      {EXPENSE_EMOJI[e.category] ?? "📦"}
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                      <Icon className="size-4" />
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{e.description}</p>
@@ -763,7 +760,8 @@ export default async function TripPage({
                     </span>
                     <DeleteExpenseButton id={e.id} />
                   </li>
-                ))}
+                  )
+                })}
               </ul>
             )}
           </div>

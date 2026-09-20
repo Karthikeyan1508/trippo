@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { cn } from "cn"
 
 import { addExpense } from "@/server/budget"
+import { EXPENSE_ICONS, EXPENSE_LABELS } from "./expense-icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -27,14 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const CATEGORIES = [
-  { value: "FOOD", label: "🍽️ Food" },
-  { value: "STAY", label: "🏨 Stay" },
-  { value: "TRANSPORT", label: "🚕 Transport" },
-  { value: "ACTIVITY", label: "🎟️ Activity" },
-  { value: "SHOPPING", label: "🛍️ Shopping" },
-  { value: "MISC", label: "📦 Misc" },
-]
+const CATEGORIES = ["FOOD", "STAY", "TRANSPORT", "ACTIVITY", "SHOPPING", "MISC"]
 
 type Member = { userId: string; name: string }
 
@@ -149,11 +143,15 @@ export function AddExpenseDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
+                  {CATEGORIES.map((c) => {
+                    const Icon = EXPENSE_ICONS[c]
+                    return (
+                      <SelectItem key={c} value={c}>
+                        <Icon className="size-4 text-muted-foreground" />
+                        {EXPENSE_LABELS[c]}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>

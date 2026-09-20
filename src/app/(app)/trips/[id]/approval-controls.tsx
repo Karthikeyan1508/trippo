@@ -34,7 +34,7 @@ export function ApprovalControls({
     startTransition(async () => {
       const res = await setApproval(itineraryId, "APPROVED")
       if (res.ok) {
-        toast.success(res.locked ? "Plan approved by everyone 🎉" : "You approved the plan")
+        toast.success(res.locked ? "Plan approved by everyone" : "You approved the plan")
         router.refresh()
       } else {
         toast.error(res.error)

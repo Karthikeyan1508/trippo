@@ -50,7 +50,7 @@ export function InviteDialog({ tripId }: { tripId: string }) {
       if (res.ok) {
         toast.success(
           res.added
-            ? "Added to the trip 🎉"
+            ? "Added to the trip"
             : "Invite created — they'll join when they sign in."
         )
         form.reset({ email: "", role: "MEMBER" })

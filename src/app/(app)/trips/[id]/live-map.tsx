@@ -1,9 +1,21 @@
 "use client"
 
 import * as React from "react"
+import { renderToStaticMarkup } from "react-dom/server"
 import type * as LeafletNS from "leaflet"
 import { toast } from "sonner"
-import { Navigation, Loader2, Trash2, Radio } from "lucide-react"
+import {
+  Navigation,
+  Loader2,
+  Trash2,
+  Radio,
+  MapPin,
+  BedDouble,
+  UtensilsCrossed,
+  Handshake,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react"
 
 import {
   getLiveData,
@@ -33,12 +45,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const CP_EMOJI: Record<string, string> = {
-  POINT: "📍",
-  STAY: "🏨",
-  FOOD: "🍽️",
-  MEETING: "🤝",
-  DANGER: "⚠️",
+const CP_ICONS: Record<string, LucideIcon> = {
+  POINT: MapPin,
+  STAY: BedDouble,
+  FOOD: UtensilsCrossed,
+  MEETING: Handshake,
+  DANGER: TriangleAlert,
 }
 const CP_TYPES = [
   { value: "POINT", label: "Point of interest" },
@@ -47,6 +59,18 @@ const CP_TYPES = [
   { value: "MEETING", label: "Meeting point" },
   { value: "DANGER", label: "Caution" },
 ]
+
+function CpIcon({ type, className }: { type: string; className?: string }) {
+  const Icon = CP_ICONS[type] ?? MapPin
+  return <Icon className={className} />
+}
+
+function cpMarkerSvg(type: string) {
+  const Icon = CP_ICONS[type] ?? MapPin
+  return renderToStaticMarkup(
+    <Icon size={16} color="#ffffff" strokeWidth={2.25} />
+  )
+}
 
 function relTime(iso: string) {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
@@ -215,7 +239,9 @@ export function LiveMap({
     for (const c of checkpoints) {
       const icon = L.divIcon({
         className: "",
-        html: `<div class="tp-cp">${CP_EMOJI[c.type] ?? "📍"}</div>`,
+        html: `<div class="tp-cp${
+          c.type === "DANGER" ? " tp-cp-danger" : ""
+        }">${cpMarkerSvg(c.type)}</div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 28],
       })
@@ -297,7 +323,9 @@ export function LiveMap({
         .tp-pin{width:40px;height:40px;border-radius:9999px;overflow:hidden;border:3px solid #10b981;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.35);display:grid;place-items:center;font-weight:600;font-size:12px;color:#111}
         .tp-pin img{width:100%;height:100%;object-fit:cover}
         .tp-pin-me{border-color:#2563eb}
-        .tp-cp{font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));cursor:pointer}
+        .tp-cp{width:30px;height:30px;border-radius:9999px;background:var(--primary);border:2px solid #fff;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.35);cursor:pointer}
+        .tp-cp svg{width:16px;height:16px}
+        .tp-cp-danger{background:#dc2626}
         .leaflet-container{font:inherit}
       `}</style>
 
@@ -379,7 +407,12 @@ export function LiveMap({
                   className="flex items-center justify-between text-sm"
                 >
                   <span className="flex items-center gap-2">
-                    <span>{CP_EMOJI[c.type] ?? "📍"}</span>
+                    <CpIcon
+                      type={c.type}
+                      className={`size-4 shrink-0 ${
+                        c.type === "DANGER" ? "text-destructive" : "text-primary"
+                      }`}
+                    />
                     {c.name}
                   </span>
                   {canEdit && (
@@ -427,7 +460,11 @@ export function LiveMap({
                 <SelectContent>
                   {CP_TYPES.map((t) => (
                     <SelectItem key={t.value} value={t.value}>
-                      {CP_EMOJI[t.value]} {t.label}
+                      <CpIcon
+                        type={t.value}
+                        className="size-4 text-muted-foreground"
+                      />
+                      {t.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
