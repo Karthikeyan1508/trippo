@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Compass, ShieldCheck, Sparkles, MapPin, Wallet } from "lucide-react"
+import { CheckCircle2, Compass, MapPin, ShieldCheck, Sparkles, Wallet } from "lucide-react"
 
 import { auth } from "@/auth"
 import { signInWithGoogle, devSignIn } from "@/server/auth-actions"
@@ -45,73 +45,112 @@ export default async function LoginPage({
   const isDev = process.env.NODE_ENV !== "production"
   const invited = next.startsWith("/join/")
 
+  const features = [
+    {
+      icon: Sparkles,
+      title: "AI plans from real data",
+      text: "Flights, stays and places pulled live, shaped around everyone's preferences.",
+    },
+    {
+      icon: MapPin,
+      title: "A live map of the crew",
+      text: "See where everyone is on the day, and never lose someone at the market.",
+    },
+    {
+      icon: Wallet,
+      title: "Budgets that settle up",
+      text: "Log expenses as you go; Trippo works out who owes whom.",
+    },
+  ]
+
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
+    <div className="grid min-h-svh lg:grid-cols-[1.1fr_1fr]">
       {/* Brand / about the product */}
-      <div className="relative hidden flex-col justify-between overflow-hidden bg-primary p-12 text-primary-foreground lg:flex">
+      <div className="relative hidden flex-col justify-between gap-10 overflow-hidden bg-[oklch(0.19_0.03_135)] p-12 text-white lg:flex xl:p-16">
         <div
           aria-hidden
           className="absolute inset-0"
           style={{
             backgroundImage:
-              "repeating-radial-gradient(circle at 85% 115%, transparent 0 22px, oklch(0.27 0.07 132 / 0.12) 22px 23px), radial-gradient(circle at 12% 8%, oklch(1 0 0 / 0.35), transparent 50%)",
+              "radial-gradient(60% 50% at 100% 100%, oklch(0.86 0.25 130 / 0.45), transparent 70%), radial-gradient(40% 35% at 0% 0%, oklch(0.86 0.25 130 / 0.16), transparent 70%), repeating-radial-gradient(circle at 100% 100%, transparent 0 26px, oklch(1 0 0 / 0.045) 26px 27px)",
           }}
         />
-        <Link href="/" className="flex items-center gap-2.5">
-          <span className="grid size-9 place-items-center rounded-lg bg-primary-foreground text-brand">
+
+        <Link href="/" className="relative flex items-center gap-2.5">
+          <span className="grid size-9 place-items-center bg-primary text-primary-foreground">
             <Compass className="size-5" />
           </span>
           <span className="text-xl font-semibold tracking-tight">Trippo</span>
         </Link>
 
-        <div className="max-w-md">
-          <h2 className="text-4xl font-bold leading-tight tracking-tight">
-            Group trips, minus the group chat chaos.
+        <div className="relative max-w-lg">
+          <p className="text-xs font-medium tracking-[0.2em] text-primary uppercase">
+            Group trip planner
+          </p>
+          <h2 className="mt-4 text-4xl font-bold leading-[1.1] tracking-tight xl:text-5xl">
+            Group trips, minus the group chat{" "}
+            <span className="text-primary">chaos.</span>
           </h2>
-          <p className="mt-4 text-lg text-primary-foreground/70">
-            One place for preferences, AI itineraries, live location and shared
-            budgets — so the whole crew stays on the same page.
+          <p className="mt-5 text-lg leading-relaxed text-white/70">
+            One place for preferences, itineraries, live location and shared
+            budgets, so the whole crew stays on the same page.
           </p>
 
-          <ul className="mt-10 space-y-3 text-primary-foreground">
-            <li className="flex items-center gap-3 border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3 backdrop-blur-md">
-              <Sparkles className="size-5 shrink-0" />
-              AI plans built from real flights, stays &amp; places
-            </li>
-            <li className="flex items-center gap-3 border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3 backdrop-blur-md">
-              <MapPin className="size-5 shrink-0" />
-              A live map of everyone on the trip
-            </li>
-            <li className="flex items-center gap-3 border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3 backdrop-blur-md">
-              <Wallet className="size-5 shrink-0" />
-              Split expenses and settle up automatically
-            </li>
+          <ul className="mt-10 space-y-3">
+            {features.map(({ icon: Icon, title, text }) => (
+              <li
+                key={title}
+                className="flex items-start gap-4 border border-white/10 bg-white/[0.06] p-4 backdrop-blur-md"
+              >
+                <span className="grid size-10 shrink-0 place-items-center bg-primary/15 text-primary">
+                  <Icon className="size-5" />
+                </span>
+                <div>
+                  <p className="font-medium text-white">{title}</p>
+                  <p className="mt-0.5 text-sm leading-relaxed text-white/60">{text}</p>
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
 
-        <p className="text-sm text-primary-foreground/60">
-          Built for the SerpApi Hackathon · Travel &amp; Local Discovery
-        </p>
+        <div className="relative flex items-end justify-between gap-6 [@media(max-height:819px)]:justify-end">
+          <div className="hidden w-64 border border-white/10 bg-white/[0.07] p-4 backdrop-blur-xl [@media(min-height:820px)]:block">
+            <p className="text-[11px] tracking-widest text-white/50 uppercase">Now planning</p>
+            <p className="mt-1 font-semibold">Coorg Escape</p>
+            <p className="text-sm text-white/60">Dec 20 – 23 · 5 travellers</p>
+            <div className="mt-3 flex items-center gap-2 text-sm text-primary">
+              <CheckCircle2 className="size-4" />
+              Plan approved by 4 of 5
+            </div>
+          </div>
+          <p className="max-w-[12rem] text-right text-xs leading-relaxed text-white/45">
+            Built for the SerpApi Hackathon · Travel &amp; Local Discovery
+          </p>
+        </div>
       </div>
 
       {/* Sign-in */}
       <div className="relative flex flex-col p-6 md:p-12">
-        <div className="flex items-center justify-between lg:hidden">
+        <div className="lg:hidden">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
+            <span className="grid size-9 place-items-center bg-primary text-primary-foreground">
               <Compass className="size-5" />
             </span>
             <span className="text-xl font-semibold tracking-tight">Trippo</span>
           </Link>
         </div>
 
-        <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-sm">
+        <div className="flex flex-1 items-center justify-center py-10">
+          <div className="w-full max-w-md border border-foreground/15 bg-card/70 p-8 shadow-xl backdrop-blur-xl md:p-10">
             <div className="space-y-2">
+              <p className="text-xs font-medium tracking-[0.2em] text-brand uppercase">
+                {invited ? "Crew invite" : "Sign in"}
+              </p>
               <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
                 {invited ? "You're invited" : "Welcome back"}
               </h1>
-              <p className="text-lg text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 {invited
                   ? "Sign in to join the trip your friends are planning."
                   : "Sign in to plan your next group trip."}
@@ -122,17 +161,16 @@ export default async function LoginPage({
               <input type="hidden" name="callbackUrl" value={next} />
               <Button
                 type="submit"
-                variant="outline"
                 size="lg"
-                className="h-12 w-full gap-3 text-base"
+                className="h-12 w-full gap-3 border border-border bg-white text-base text-neutral-900 shadow-sm hover:bg-neutral-50"
               >
                 <GoogleIcon className="size-5" />
                 Continue with Google
               </Button>
             </form>
 
-            <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-sm text-muted-foreground">
-              <ShieldCheck className="size-4" />
+            <p className="mt-5 flex items-center justify-center gap-1.5 text-center text-sm text-muted-foreground">
+              <ShieldCheck className="size-4 shrink-0" />
               We only use your Google account to identify you.
             </p>
 
