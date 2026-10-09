@@ -121,8 +121,24 @@ export function PushToggle() {
     setBusy(true)
     const res = await sendTestNotification()
     setBusy(false)
-    if (!res.ok) toast.error(res.error)
-    else toast.success("Test sent. It should appear in a moment")
+    if (!res.ok) return void toast.error(res.error)
+    const { devices, sent, removed, failed, status } = res.data
+    if (sent > 0) {
+      toast.success("Sent to your device", {
+        description:
+          "It should pop up in the corner of your screen. Nothing there? Check that Do Not Disturb or Focus is off and that notifications are allowed for your browser in system settings.",
+        duration: 12000,
+      })
+    } else if (devices === 0 || removed > 0) {
+      setState("off")
+      toast.error("This browser isn't registered any more", {
+        description: "Tap Turn on again to re-register it.",
+      })
+    } else if (failed > 0) {
+      toast.error(`The push service refused it${status ? ` (error ${status})` : ""}`)
+    } else {
+      toast.error("Nothing was sent")
+    }
   }
 
   return (

@@ -32,13 +32,15 @@ export function pushEnabled() {
  * subscriptions (the browser reports 404/410) are removed as we find them.
  */
 export async function sendPush(userIds: string[], payload: PushPayload) {
-  if (userIds.length === 0 || !pushEnabled()) return { sent: 0, removed: 0 }
+  if (userIds.length === 0 || !pushEnabled()) return { sent: 0, removed: 0, failed: 0, lastStatus: undefined as number | undefined }
 
   const subs = await prisma.pushSubscription.findMany({
     where: { userId: { in: userIds } },
   })
   const body = JSON.stringify(payload)
   let sent = 0
+  let failed = 0
+  let lastStatus: number | undefined
   const dead: string[] = []
 
   await Promise.all(
@@ -54,6 +56,8 @@ export async function sendPush(userIds: string[], payload: PushPayload) {
         const status = (error as { statusCode?: number }).statusCode
         if (status === 404 || status === 410) dead.push(s.id)
         else console.error("Push failed:", status ?? error)
+        failed++
+        lastStatus = status
       }
     })
   )
@@ -61,5 +65,5 @@ export async function sendPush(userIds: string[], payload: PushPayload) {
   if (dead.length > 0) {
     await prisma.pushSubscription.deleteMany({ where: { id: { in: dead } } })
   }
-  return { sent, removed: dead.length }
+  return { sent, removed: dead.length, failed, lastStatus }
 }

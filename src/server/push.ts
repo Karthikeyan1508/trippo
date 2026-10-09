@@ -2,8 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
-import { pushEnabled } from "@/lib/push"
-import { notify } from "@/server/notify"
+import { pushEnabled, sendPush } from "@/lib/push"
 
 type Result<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -65,19 +64,36 @@ export async function removePushSubscription(endpoint: string): Promise<Result> 
   return { ok: true }
 }
 
-/** A notification to yourself, so you can confirm push works on this device. */
-export async function sendTestNotification(): Promise<Result<{ devices: number }>> {
+export type TestResult = {
+  /** Devices this account has registered. */
+  devices: number
+  /** Devices the push service accepted the message for. */
+  sent: number
+  /** Devices that were dead and got removed, so the user must turn push on again. */
+  removed: number
+  failed: number
+  status?: number
+}
+
+/**
+ * A push to yourself, so you can confirm it reaches this device. It goes
+ * straight to the push service (no 2-minute de-duplication, no inbox row) and
+ * reports what actually happened.
+ */
+export async function sendTestNotification(): Promise<Result<TestResult>> {
   const user = await requireUser()
   if (!pushEnabled()) {
     return { ok: false, error: "Push isn't configured on the server yet." }
   }
   const devices = await prisma.pushSubscription.count({ where: { userId: user.id } })
-  await notify({
-    to: { users: [user.id] },
-    type: "test",
-    title: "Notifications are working",
+  const res = await sendPush([user.id], {
+    title: "Trippo notifications are working",
     body: "You'll hear about plan votes, new polls, gear picks and expenses.",
     url: "/notifications",
+    tag: `test:${Date.now()}`,
   })
-  return { ok: true, data: { devices } }
+  return {
+    ok: true,
+    data: { devices, sent: res.sent, removed: res.removed, failed: res.failed, status: res.lastStatus },
+  }
 }
