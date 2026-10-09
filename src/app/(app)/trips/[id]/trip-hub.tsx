@@ -211,7 +211,7 @@ function CrewCard({
               </p>
               <p className="text-xs text-muted-foreground">
                 {m.role === "OBSERVER"
-                  ? "Observer — follows along"
+                  ? "Observer, follows along"
                   : m.hasPreference
                     ? "Preferences shared"
                     : "Hasn't shared preferences yet"}
@@ -260,7 +260,7 @@ function TodayCard({ dayNumber, items }: { dayNumber: number; items: HubTodayIte
           {items.map((it) => (
             <li key={it.id} className="flex gap-3 px-5 py-3">
               <span className="w-12 shrink-0 pt-0.5 text-xs font-medium text-muted-foreground tabular-nums">
-                {it.time ?? "—"}
+                {it.time ?? "Flexible"}
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{it.title}</p>

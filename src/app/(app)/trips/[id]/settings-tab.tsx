@@ -91,7 +91,7 @@ export function SettingsTab({
               <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" />
                 The destination or dates changed, so the current plan may be out of
-                date — regenerate it from the Itinerary tab.
+                date. Regenerate it from the Itinerary tab.
               </p>
             )}
 

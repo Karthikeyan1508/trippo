@@ -108,7 +108,7 @@ function StopForm({ mode, onDone }: { mode: Mode; onDone: () => void }) {
       }
       toast.success(
         res.votesReset
-          ? "Plan updated — votes were reset, so everyone needs to approve again."
+          ? "Plan updated. Votes were reset, so everyone needs to approve again."
           : "Plan updated"
       )
       onDone()
@@ -224,7 +224,7 @@ export function StopMenu({
     startTransition(async () => {
       const res = await action()
       if (!res.ok) toast.error(res.error)
-      else if (res.votesReset) toast.success("Votes were reset — the plan changed.")
+      else if (res.votesReset) toast.success("Votes were reset. The plan changed.")
       else if (done) toast.success(done)
     })
   }

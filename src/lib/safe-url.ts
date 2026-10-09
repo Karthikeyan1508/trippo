@@ -1,6 +1,6 @@
 /**
  * Links in search results come from third parties. Only ever render http(s)
- * URLs into an `href` — never `javascript:` or `data:` schemes.
+ * URLs into an `href`, never `javascript:` or `data:` schemes.
  */
 export function safeHttpUrl(value: string | null | undefined): string | undefined {
   if (!value) return undefined

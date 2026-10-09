@@ -18,7 +18,7 @@ export function useTripTab() {
  * Radix Tabs whose active section lives in the URL (`?tab=itinerary`).
  *
  * That makes every section deep-linkable and keeps refresh / back / forward
- * working. Switching uses the native History API — Next.js syncs it with
+ * working. Switching uses the native History API, Next.js syncs it with
  * `useSearchParams`, so there is no server round-trip per click.
  */
 export function TripTabs({

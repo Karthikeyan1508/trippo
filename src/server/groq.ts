@@ -58,7 +58,7 @@ export type ItineraryContext = {
     /** Free-text accessibility / medical needs the group must plan around. */
     accessibility: string[]
   }
-  /** The stay the group already picked, if any — the plan should be built around it. */
+  /** The stay the group already picked, if any, the plan should be built around it. */
   chosenStay?: { name: string; price?: string | null } | null
   research: ResearchBundle
 }
@@ -436,7 +436,7 @@ export async function generatePrepWithGroq(
         role: "user",
         content: `Prep a ${ctx.days}-day ${ctx.tripType.toLowerCase()} trip to ${ctx.destination}${
           ctx.originCity ? ` from ${ctx.originCity}` : ""
-        } (${ctx.startDate}–${ctx.endDate}). Group interests: ${
+        } (${ctx.startDate}-${ctx.endDate}). Group interests: ${
           ctx.interests.join(", ") || "general sightseeing"
         }.${ctx.webTips ? `\n\nWeb notes:\n${ctx.webTips}` : ""}`,
       },
@@ -491,7 +491,7 @@ const GEAR_SYSTEM = `You are a thoughtful travel-gear advisor for a group trip.
 Return 6-8 shopping ideas via the gear_ideas function. Each idea has:
 - query: a concise Amazon search phrase (generic product type; avoid brand names).
 - label: a 2-4 word chip title.
-- reason: ONE short sentence tying it to THIS trip — the season, the destination's climate, the planned activities or the group's needs.
+- reason: ONE short sentence tying it to THIS trip. The season, the destination's climate, the planned activities or the group's needs.
 Prioritise practical, packable items people forget. No duplicates. Skip obvious basics (toothbrush, clothes) unless the trip makes them special.
 Respect any accessibility notes (e.g. suggest supportive footwear for knee trouble).`
 

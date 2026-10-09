@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 /**
- * Generates (or replaces) the plan — with the safeguards the flow needs:
+ * Generates (or replaces) the plan, with the safeguards the flow needs:
  *  - warns when people haven't shared preferences yet, and
  *  - confirms before replacing an existing plan, spelling out that votes reset.
  */
@@ -50,7 +50,7 @@ export function GenerateItineraryButton({
         toast.success(
           res.source === "AI"
             ? "Your plan is ready"
-            : "Sample plan created — add SerpApi & Groq keys for live data."
+            : "Sample plan created. Add SerpApi & Groq keys for live data."
         )
         router.refresh()
       } else {
@@ -105,7 +105,7 @@ export function GenerateItineraryButton({
               (planLocked
                 ? "The current plan is locked and approved by everyone. A new plan resets every approval and the trip goes back to planning."
                 : hasVotes
-                  ? "A new plan clears the votes already cast — everyone will need to approve again."
+                  ? "A new plan clears the votes already cast. Everyone will need to approve again."
                   : "The current plan will be replaced by a new one.")}
             {!hasExisting && "You can always regenerate once they've answered."}
           </AlertDialogDescription>

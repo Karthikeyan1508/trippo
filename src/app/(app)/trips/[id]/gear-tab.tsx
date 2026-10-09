@@ -255,7 +255,7 @@ export function GearTab({
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search products — “trekking shoes”, “power bank”…"
+                placeholder="Search products, e.g. “trekking shoes”, “power bank”"
                 aria-label="Search products"
                 className="h-11 pl-9"
                 maxLength={100}

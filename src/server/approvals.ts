@@ -34,14 +34,14 @@ export async function setApproval(
     return { ok: false, error: "Observers can't vote on the plan." }
   }
 
-  // Only the newest plan can be voted on — older versions are history.
+  // Only the newest plan can be voted on, older versions are history.
   const latest = await prisma.itinerary.findFirst({
     where: { tripId: itinerary.tripId },
     orderBy: { generatedAt: "desc" },
     select: { id: true },
   })
   if (latest?.id !== itineraryId) {
-    return { ok: false, error: "This plan was replaced — refresh to see the latest." }
+    return { ok: false, error: "This plan was replaced. Refresh to see the latest." }
   }
 
   const cleanReason = reason?.trim() ? reason.trim().slice(0, 500) : null

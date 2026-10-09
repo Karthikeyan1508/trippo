@@ -82,7 +82,7 @@ function PickRow({
         <div className="min-w-0 flex-1">
           <h4 className="line-clamp-2 text-sm leading-snug font-medium">{pick.title}</h4>
           <p className="mt-1.5 flex items-center gap-2.5 text-sm">
-            <span className="font-semibold">{pick.price ?? "—"}</span>
+            <span className="font-semibold">{pick.price ?? "n/a"}</span>
             {pick.rating != null && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <Star className="size-3 fill-amber-400 text-amber-400" />
@@ -133,7 +133,7 @@ function PickRow({
         {pick.note ? (
           <>
             <span className="text-foreground">“{pick.note}”</span>
-            <span className="text-muted-foreground"> — {suggester}</span>
+            <span className="text-muted-foreground"> · {suggester}</span>
           </>
         ) : (
           <>Suggested by {suggester}</>

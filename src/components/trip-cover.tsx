@@ -29,7 +29,7 @@ export function TripCover({
         className
       )}
     >
-      {/* Contour lines — the fallback's "map" texture */}
+      {/* Contour lines: the fallback's "map" texture */}
       <div
         aria-hidden
         className="absolute inset-0 -z-20 opacity-80"

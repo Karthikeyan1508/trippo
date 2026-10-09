@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  // Narration costs real money per character — cap how fast one person can spend it.
+  // Narration costs real money per character, cap how fast one person can spend it.
   const limited = rateLimit(`voice:${session.user.id}`, 60, 60 * 60 * 1000)
   if (!limited.ok) {
     return NextResponse.json(

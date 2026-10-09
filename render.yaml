@@ -33,7 +33,7 @@ services:
         sync: false
       - key: ELEVENLABS_VOICE_ID
         sync: false
-      # Web Push — generate a pair with: npx web-push generate-vapid-keys
+      # Web Push, generate a pair with: npx web-push generate-vapid-keys
       # NEXT_PUBLIC_* is inlined at build time, so set it before the first deploy.
       - key: NEXT_PUBLIC_VAPID_PUBLIC_KEY
         sync: false

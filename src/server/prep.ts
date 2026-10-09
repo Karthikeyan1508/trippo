@@ -145,7 +145,7 @@ function buildSamplePrep(ctx: PrepContext): PrepPack {
     summary: `Prep checklist for your ${ctx.days}-day trip to ${ctx.destination}. Add API keys for a destination-tailored guide.`,
     etiquette: [
       "Dress modestly when visiting temples or religious sites.",
-      "Carry small cash — many local vendors don't take cards.",
+      "Carry small cash. Many local vendors don't take cards.",
       "Ask before photographing people or ceremonies.",
       "Remove footwear where signs or hosts request it.",
       "Bargain politely at markets; a smile goes a long way.",

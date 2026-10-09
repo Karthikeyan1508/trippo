@@ -44,7 +44,7 @@ export async function searchProducts(
   // Each uncached search costs a SerpApi credit, so keep runaway use in check.
   const limited = rateLimit(`amazon:${user.id}`, 40, 60 * 60 * 1000)
   if (!limited.ok) {
-    return { ok: false, error: "You've searched a lot — try again in a few minutes." }
+    return { ok: false, error: "You've searched a lot. Try again in a few minutes." }
   }
 
   const trip = await prisma.trip.findUnique({ where: { id: tripId }, select: { currency: true } })
@@ -172,7 +172,7 @@ export async function suggestProduct(
   if (!existing) {
     const count = await prisma.productSuggestion.count({ where: { tripId } })
     if (count >= MAX_PRODUCTS_PER_TRIP) {
-      return { ok: false, error: "The crew list is full — remove something first." }
+      return { ok: false, error: "The crew list is full. Remove something first." }
     }
   }
 
@@ -226,7 +226,7 @@ export async function suggestProduct(
   return { ok: true, data: toPick(full) }
 }
 
-/** "I need this" — toggles the caller's vote. */
+/** "I need this", toggles the caller's vote. */
 export async function toggleProductVote(productId: string): Promise<Result<{ voted: boolean }>> {
   const product = await prisma.productSuggestion.findUnique({ where: { id: productId } })
   if (!product) return { ok: false, error: "That item is no longer on the list." }

@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-/** The trip's basic fields — shared by "Create trip" and "Trip settings". */
+/** The trip's basic fields, shared by "Create trip" and "Trip settings". */
 export function TripFormFields({
   form,
 }: {

@@ -1,6 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton"
 
-/** Shown instantly while the trip loads — mirrors the sidebar + hub layout. */
+/** Shown instantly while the trip loads, mirrors the sidebar + hub layout. */
 export default function TripLoading() {
   return (
     <div className="flex min-h-svh w-full">

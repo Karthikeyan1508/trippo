@@ -168,7 +168,7 @@ export function TravelOptions({
     setChoosing(stayId)
     const res = await selectStay(tripId, stayId)
     setChoosing(null)
-    if (res.ok) toast.success("Group stay selected — it's used the next time you generate the plan.")
+    if (res.ok) toast.success("Group stay selected. It's used the next time you generate the plan.")
     else toast.error(res.error)
   }
 
@@ -273,7 +273,7 @@ export function TravelOptions({
 
         {transport && transport.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            No local listings found — try a more specific start or end point.
+            No local listings found. Try a more specific start or end point.
           </p>
         )}
         {transport && transport.length > 0 && (

@@ -1,4 +1,4 @@
-// Trip Planner — Prisma schema
+// Trip Planner, Prisma schema
 // Prisma 7 (query compiler + driver adapters). CLI uses DIRECT_URL for
 // migrations; the runtime client connects via the pg driver adapter.
 

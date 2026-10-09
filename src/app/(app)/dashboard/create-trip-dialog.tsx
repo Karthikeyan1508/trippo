@@ -67,7 +67,7 @@ export function CreateTripDialog({
         <DialogHeader>
           <DialogTitle>Create a trip</DialogTitle>
           <DialogDescription>
-            Just the basics — next you&apos;ll invite your crew and everyone
+            Just the basics. Next you&apos;ll invite your crew and everyone
             shares how they like to travel.
           </DialogDescription>
         </DialogHeader>

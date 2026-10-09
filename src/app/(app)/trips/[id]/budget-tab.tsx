@@ -175,7 +175,7 @@ export function BudgetTab({
         </div>
         {expenses.length === 0 ? (
           <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-            No expenses yet — add the first one.
+            No expenses yet. Add the first one.
           </p>
         ) : (
           <ul className="divide-y">

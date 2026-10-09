@@ -127,13 +127,13 @@ export function computeJourney(input: JourneyInput) {
 
   // ── The viewer's single most useful next action ────────────────────
   const next = ((): NextAction => {
-    // 1. Everyone's own preferences come first — they shape the whole plan.
+    // 1. Everyone's own preferences come first, they shape the whole plan.
     if (isVoter && viewer && !viewer.hasPreference && !input.planLocked) {
       return {
         tone: "action",
         eyebrow: "Your move",
         title: "Tell us how you like to travel",
-        body: "Diet, pace, budget and interests — it takes about two minutes and shapes the itinerary for everyone.",
+        body: "Diet, pace, budget and interests. It takes about two minutes and shapes the itinerary for everyone.",
         cta: { label: "Add my preferences", tab: "preferences" },
       }
     }
@@ -146,7 +146,7 @@ export function computeJourney(input: JourneyInput) {
         title: "Bring your crew in",
         body:
           pendingInvites > 0
-            ? `${plural(pendingInvites, "email invite")} waiting. Share the link too — it's the fastest way to get everyone in.`
+            ? `${plural(pendingInvites, "email invite")} waiting. Share the link too. It's the fastest way to get everyone in.`
             : "Share the invite link in your group chat. Everyone fills in their preferences before the plan is built.",
         cta: { label: "Invite people", invite: true },
       }
@@ -159,7 +159,7 @@ export function computeJourney(input: JourneyInput) {
           return {
             tone: "action",
             eyebrow: "Next step",
-            title: "Everyone's in — build the plan",
+            title: "Everyone's in. Build the plan",
             body: "All preferences are collected. Trippo researches real places and balances them into a day-by-day itinerary.",
             cta: { label: "Generate the plan", tab: "itinerary" },
           }
@@ -168,7 +168,7 @@ export function computeJourney(input: JourneyInput) {
           tone: "action",
           eyebrow: "Next step",
           title: `Waiting on ${names(missingPrefs)}`,
-          body: `${withPrefs.length} of ${voters.length} have shared preferences. Plans are fairer when everyone answers — but you can generate now and regenerate later.`,
+          body: `${withPrefs.length} of ${voters.length} have shared preferences. Plans are fairer when everyone answers. But you can generate now and regenerate later.`,
           cta: { label: "Generate anyway", tab: "itinerary" },
           secondary: { label: "Invite people", tab: "members" },
         }
@@ -244,7 +244,7 @@ export function computeJourney(input: JourneyInput) {
         tone: "action",
         eyebrow: "Get ready",
         title: `${input.checklist.total - input.checklist.done} items left to pack`,
-        body: "Tick things off your personal checklist as you go — it's just for you.",
+        body: "Tick things off your personal checklist as you go. It's just for you.",
         cta: { label: "Open my checklist", tab: "prep" },
       }
     }

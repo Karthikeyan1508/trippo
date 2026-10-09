@@ -38,7 +38,7 @@ export function NotificationsPanel({ initial }: { initial: NotificationData[] })
 
       {items.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-          You&apos;re all caught up — new activity from your crews shows up here.
+          You&apos;re all caught up. New activity from your crews shows up here.
         </p>
       ) : (
         <ul className="divide-y">

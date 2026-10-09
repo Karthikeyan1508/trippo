@@ -272,7 +272,7 @@ export function TripStory({ tripId }: { tripId: string }) {
     }
   }, [story])
 
-  // Camera movement — runs when the step changes.
+  // Camera movement: runs when the step changes.
   React.useEffect(() => {
     const map = mapRef.current
     const ml = mlRef.current
@@ -303,7 +303,7 @@ export function TripStory({ tripId }: { tripId: string }) {
         essential: true,
       })
     }
-    // highlight the current stop (native filter update — instant, no lag)
+    // highlight the current stop (native filter update, instant, no lag)
     if (map.getLayer("stops-halo")) {
       map.setFilter("stops-halo", [
         "==",
@@ -313,7 +313,7 @@ export function TripStory({ tripId }: { tripId: string }) {
     }
   }, [step, mapReady, started, story, N])
 
-  // Narration — runs while playing.
+  // Narration: runs while playing.
   React.useEffect(() => {
     if (!started || !playing || !story || !mapReady) return
     const text =
@@ -390,7 +390,7 @@ export function TripStory({ tripId }: { tripId: string }) {
         </div>
         <h3 className="text-lg font-semibold">Your trip, as a story</h3>
         <p className="mt-1 max-w-md text-sm text-muted-foreground">
-          A cinematic fly-through of your itinerary — the map travels stop to
+          A cinematic fly-through of your itinerary. The map travels stop to
           stop in 3D, with photos of each place and an AI voice-over.
         </p>
         <Button onClick={load} disabled={loading} size="lg" className="mt-6 gap-2">
@@ -422,7 +422,7 @@ export function TripStory({ tripId }: { tripId: string }) {
       <style>{`.maplibregl-ctrl-attrib{display:none}`}</style>
 
       <div className="flex flex-col lg:flex-row">
-        {/* LEFT — photos, details, links, controls */}
+        {/* LEFT: photos, details, links, controls */}
         <div className="flex w-full flex-col border-b lg:h-[68vh] lg:min-h-[540px] lg:w-[400px] lg:shrink-0 lg:border-r lg:border-b-0">
           {/* Photo carousel */}
           <div className="relative h-52 shrink-0 overflow-hidden bg-muted">
@@ -607,7 +607,7 @@ export function TripStory({ tripId }: { tripId: string }) {
           </div>
         </div>
 
-        {/* RIGHT — map */}
+        {/* RIGHT: map */}
         <div className="relative w-full lg:flex-1">
           <div
             ref={containerRef}

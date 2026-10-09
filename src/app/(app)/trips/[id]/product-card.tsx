@@ -48,7 +48,7 @@ function SuggestPopover({
         <div>
           <p className="text-sm font-medium">Why should the crew get this?</p>
           <p className="text-xs text-muted-foreground">
-            Optional — a line helps people decide. Everyone can vote on it.
+            Optional: a line helps people decide. Everyone can vote on it.
           </p>
         </div>
         <Textarea

@@ -98,7 +98,7 @@ export function ApprovalControls({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={3}
-            placeholder="e.g. Day 2 feels too packed — can we drop a stop?"
+            placeholder="e.g. Day 2 feels too packed. Can we drop a stop?"
           />
           <DialogFooter>
             <Button

@@ -32,7 +32,7 @@ export function NotificationBell({ initialUnread = 0 }: { initialUnread?: number
         const count = await getUnreadCount()
         if (alive) setUnread(count)
       } catch {
-        /* offline or signed out — keep the last known count */
+        /* offline or signed out, keep the last known count */
       }
     }
     const timer = setInterval(refresh, POLL_MS)

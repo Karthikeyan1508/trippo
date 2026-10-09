@@ -199,7 +199,7 @@ export async function generateItinerary(tripId: string): Promise<ActionResult> {
     actorId: user.id,
     to: "others",
     type: "plan_ready",
-    title: "The plan is ready — review and vote",
+    title: "The plan is ready. Review and vote",
     body: trip.name,
     url: tripUrl(tripId, "itinerary"),
   })
@@ -240,7 +240,7 @@ function buildSampleItinerary(ctx: ItineraryContext): GeneratedItinerary {
 
   const noteData = research.available
     ? "Built from live SerpApi place data."
-    : "Sample plan — add SerpApi & Groq keys for live, personalised data."
+    : "Sample plan. Add SerpApi & Groq keys for live, personalised data."
 
   const out: GeneratedItinerary["days"] = []
   let aIdx = 0

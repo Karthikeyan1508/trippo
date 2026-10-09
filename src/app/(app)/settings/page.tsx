@@ -10,7 +10,7 @@ import { TripModeControls } from "@/components/trip-mode-controls"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ClearOfflineButton, SignOutButton } from "./device-settings"
 
-export const metadata = { title: "Settings — Trippo" }
+export const metadata = { title: "Settings | Trippo" }
 
 function Section({
   icon: Icon,

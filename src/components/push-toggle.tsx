@@ -122,7 +122,7 @@ export function PushToggle() {
     const res = await sendTestNotification()
     setBusy(false)
     if (!res.ok) toast.error(res.error)
-    else toast.success("Test sent — it should appear in a moment")
+    else toast.success("Test sent. It should appear in a moment")
   }
 
   return (

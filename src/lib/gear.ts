@@ -1,5 +1,5 @@
 /**
- * Gear & shopping — shared types and the deterministic idea generator.
+ * Gear & shopping, shared types and the deterministic idea generator.
  * Plain module (no "use server"/"use client") so the server actions, the page
  * and the client UI can all import it.
  */
@@ -9,7 +9,7 @@ export type GearIdea = {
   query: string
   /** Short chip title, e.g. "Thermal wear". */
   label: string
-  /** Why it suits THIS trip — shown under the label. */
+  /** Why it suits THIS trip, shown under the label. */
   reason: string
 }
 
@@ -59,7 +59,7 @@ export function fallbackGearIdeas(ctx: GearContext): GearIdea[] {
       {
         query: "thermal innerwear set",
         label: "Thermal wear",
-        reason: `${place} gets properly cold this time of year — a base layer changes everything.`,
+        reason: `${place} gets properly cold this time of year. A base layer changes everything.`,
       },
       {
         query: "woollen gloves cap neck warmer set",
@@ -72,7 +72,7 @@ export function fallbackGearIdeas(ctx: GearContext): GearIdea[] {
     ideas.push({
       query: "waterproof backpack rain cover",
       label: "Rain protection",
-      reason: `It's monsoon season around ${place} — keep bags and phones dry.`,
+      reason: `It's monsoon season around ${place}. Keep bags and phones dry.`,
     })
   }
   if (has("Trekking") || ctx.tripType === "ADVENTURE") {
@@ -80,7 +80,7 @@ export function fallbackGearIdeas(ctx: GearContext): GearIdea[] {
       {
         query: "trekking shoes",
         label: "Trekking shoes",
-        reason: "Your crew picked trekking — grip and ankle support matter on trails.",
+        reason: "Your crew picked trekking. Grip and ankle support matter on trails.",
       },
       {
         query: "headlamp rechargeable",
@@ -107,7 +107,7 @@ export function fallbackGearIdeas(ctx: GearContext): GearIdea[] {
     ideas.push({
       query: "slip on comfortable sandals",
       label: "Slip-on footwear",
-      reason: "Shoes come off at every temple — easy on, easy off.",
+      reason: "Shoes come off at every temple. Easy on, easy off.",
     })
   }
   if (has("Nightlife") || has("Pubs") || has("Parties")) {
@@ -137,7 +137,7 @@ export function fallbackGearIdeas(ctx: GearContext): GearIdea[] {
     {
       query: "power bank 20000mah",
       label: "Power bank",
-      reason: "Maps, photos and tickets all drain the phone — one bank can cover the crew.",
+      reason: "Maps, photos and tickets all drain the phone. One bank can cover the crew.",
     },
     {
       query: "universal travel adapter",

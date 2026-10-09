@@ -1,7 +1,7 @@
 # Trippo
 
 **Group trips, minus the group-chat chaos.** Trippo is one place for a friend
-group to go from "where should we go?" to "who owes whom ₹340?" — preferences,
+group to go from "where should we go?" to "who owes whom ₹340?" with preferences,
 an AI itinerary built from real places, voting, prep, live location and a
 shared budget.
 
@@ -12,18 +12,18 @@ Built for the SerpApi Hackathon (Travel & Local Discovery).
 Trippo is organised around five stages, and the **Overview** tells each person
 the single next thing _they_ should do:
 
-1. **Invite your crew** — share one link (WhatsApp-ready). Friends sign in and
+1. **Invite your crew**: share one link (WhatsApp-ready). Friends sign in and
    land straight on the trip.
-2. **Share preferences** — diet, pace, budget, interests, accessibility needs.
-3. **Build the plan** — SerpApi research + Groq turn the group's answers into a
+2. **Share preferences**: diet, pace, budget, interests, accessibility needs.
+3. **Build the plan**: SerpApi research + Groq turn the group's answers into a
    day-by-day itinerary. The admin can edit, reorder and add stops.
-4. **Approve together** — everyone votes; the plan locks when all voters agree.
+4. **Approve together**: everyone votes; the plan locks when all voters agree.
    Any edit resets the votes.
-5. **Get ready & go** — prep guide + private packing checklist, live map,
+5. **Get ready & go**: prep guide + private packing checklist, live map,
    shared budget with settle-up, and a cinematic "story" fly-through.
 
 Along the way: polls for group decisions, a stay shortlist the group can vote
-on, local transport lookups, and **Gear & shopping** — trip-specific product
+on, local transport lookups, and **Gear & shopping**: trip-specific product
 ideas, Amazon search through SerpApi's `amazon` engine, and a crew list every
 member can add to and vote on.
 
@@ -38,11 +38,11 @@ Leaflet/OpenStreetMap + MapLibre · ElevenLabs (optional narration)
 The UI follows the shadcn preset `b3Sm9Pe4Y` (style `radix-sera`, Space Grotesk,
 a lime primary). On top of it, a few house rules live in `src/app/globals.css`:
 
-- **Square corners everywhere** — `--radius` is 0 and a global reset catches any
+- **Square corners everywhere**: `--radius` is 0 and a global reset catches any
   `rounded-*` class.
-- **Glass surfaces** — cards, the sidebar and sticky bars are translucent and
+- **Glass surfaces**: cards, the sidebar and sticky bars are translucent and
   blurred, over a very mild WebGL shader (`components/shader-background.tsx`).
-- **Light / dark / system** — chosen in **Settings** (`/settings`), with quick
+- **Light / dark / system**: chosen in **Settings** (`/settings`), with quick
   toggles in the headers. Use `text-brand` (not `text-primary`) for accent text:
   the preset's lime is too light to read on white.
 
@@ -100,13 +100,13 @@ Notes for contributors:
 
 ## Notifications & installing the app
 
-- **In-app inbox** — every crew action that matters (votes, polls, gear picks,
+- **In-app inbox**: every crew action that matters (votes, polls, gear picks,
   expenses, plan changes) writes a `Notification` row. The bell, the dashboard
   section and `/notifications` all deep-link to the right trip section.
-- **Push** — standard Web Push (VAPID + service worker); no Firebase needed.
+- **Push**: standard Web Push (VAPID + service worker); no Firebase needed.
   Each person opts in per device in **Settings**. iPhones only allow push for
   apps added to the Home Screen.
-- **PWA** — `manifest.webmanifest`, generated icons at `/icons/*`, and
+- **PWA**: `manifest.webmanifest`, generated icons at `/icons/*`, and
   `public/sw.js` (offline shell + push). Use the browser's "Install" option.
 
 ## Deployment

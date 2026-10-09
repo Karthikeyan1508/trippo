@@ -46,7 +46,7 @@ export function useOpenNotification(onRead?: (id: string) => void) {
   return (n: NotificationData) => {
     if (!n.read) {
       onRead?.(n.id)
-      void markNotificationRead(n.id) // fire and forget — navigation shouldn't wait
+      void markNotificationRead(n.id) // fire and forget, navigation shouldn't wait
     }
     router.push(n.url)
   }

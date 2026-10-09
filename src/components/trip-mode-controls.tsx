@@ -54,7 +54,7 @@ export function TripModeControls() {
     <div className="flex flex-wrap items-center gap-2">
       <Badge variant={online ? "secondary" : "destructive"} className="gap-1.5 py-1">
         {online ? <Wifi className="size-3" /> : <WifiOff className="size-3" />}
-        {online ? "Online" : "Offline — showing saved pages"}
+        {online ? "Online" : "Offline: showing saved pages"}
       </Badge>
 
       {installPrompt && (

@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { CheckCircle2, Compass, MapPin, ShieldCheck, Sparkles, Wallet } from "lucide-react"
+import { Compass, ShieldCheck } from "lucide-react"
 
 import { auth } from "@/auth"
 import { signInWithGoogle, devSignIn } from "@/server/auth-actions"
@@ -45,89 +45,33 @@ export default async function LoginPage({
   const isDev = process.env.NODE_ENV !== "production"
   const invited = next.startsWith("/join/")
 
-  const features = [
-    {
-      icon: Sparkles,
-      title: "AI plans from real data",
-      text: "Flights, stays and places pulled live, shaped around everyone's preferences.",
-    },
-    {
-      icon: MapPin,
-      title: "A live map of the crew",
-      text: "See where everyone is on the day, and never lose someone at the market.",
-    },
-    {
-      icon: Wallet,
-      title: "Budgets that settle up",
-      text: "Log expenses as you go; Trippo works out who owes whom.",
-    },
-  ]
-
   return (
-    <div className="grid min-h-svh lg:grid-cols-[1.1fr_1fr]">
-      {/* Brand / about the product */}
-      <div className="relative hidden flex-col justify-between gap-10 overflow-hidden bg-[oklch(0.19_0.03_135)] p-12 text-white lg:flex xl:p-16">
+    <div className="grid min-h-svh lg:h-svh lg:grid-cols-[1.1fr_1fr] lg:overflow-hidden">
+      {/* Brand: the name and one line, nothing else. */}
+      <div className="relative hidden h-svh flex-col justify-between overflow-hidden bg-[oklch(0.19_0.03_135)] p-12 text-white lg:flex xl:p-16">
         <div
           aria-hidden
           className="absolute inset-0"
           style={{
             backgroundImage:
-              "radial-gradient(60% 50% at 100% 100%, oklch(0.86 0.25 130 / 0.45), transparent 70%), radial-gradient(40% 35% at 0% 0%, oklch(0.86 0.25 130 / 0.16), transparent 70%), repeating-radial-gradient(circle at 100% 100%, transparent 0 26px, oklch(1 0 0 / 0.045) 26px 27px)",
+              "radial-gradient(60% 50% at 100% 100%, oklch(0.86 0.25 130 / 0.5), transparent 70%), radial-gradient(40% 35% at 0% 0%, oklch(0.86 0.25 130 / 0.16), transparent 70%), repeating-radial-gradient(circle at 100% 100%, transparent 0 26px, oklch(1 0 0 / 0.045) 26px 27px)",
           }}
         />
 
-        <Link href="/" className="relative flex items-center gap-2.5">
-          <span className="grid size-9 place-items-center bg-primary text-primary-foreground">
-            <Compass className="size-5" />
+        <Link href="/" className="relative flex items-center gap-3">
+          <span className="grid size-11 place-items-center bg-primary text-primary-foreground">
+            <Compass className="size-6" />
           </span>
-          <span className="text-xl font-semibold tracking-tight">Trippo</span>
+          <span className="text-2xl font-semibold tracking-tight">Trippo</span>
         </Link>
 
-        <div className="relative max-w-lg">
-          <p className="text-xs font-medium tracking-[0.2em] text-primary uppercase">
-            Group trip planner
-          </p>
-          <h2 className="mt-4 text-4xl font-bold leading-[1.1] tracking-tight xl:text-5xl">
-            Group trips, minus the group chat{" "}
-            <span className="text-primary">chaos.</span>
-          </h2>
-          <p className="mt-5 text-lg leading-relaxed text-white/70">
-            One place for preferences, itineraries, live location and shared
-            budgets, so the whole crew stays on the same page.
-          </p>
+        <h2 className="relative text-6xl leading-[1.02] font-bold tracking-tight xl:text-7xl 2xl:text-8xl">
+          Less group chat.
+          <br />
+          <span className="text-primary">More trip.</span>
+        </h2>
 
-          <ul className="mt-10 space-y-3">
-            {features.map(({ icon: Icon, title, text }) => (
-              <li
-                key={title}
-                className="flex items-start gap-4 border border-white/10 bg-white/[0.06] p-4 backdrop-blur-md"
-              >
-                <span className="grid size-10 shrink-0 place-items-center bg-primary/15 text-primary">
-                  <Icon className="size-5" />
-                </span>
-                <div>
-                  <p className="font-medium text-white">{title}</p>
-                  <p className="mt-0.5 text-sm leading-relaxed text-white/60">{text}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="relative flex items-end justify-between gap-6 [@media(max-height:819px)]:justify-end">
-          <div className="hidden w-64 border border-white/10 bg-white/[0.07] p-4 backdrop-blur-xl [@media(min-height:820px)]:block">
-            <p className="text-[11px] tracking-widest text-white/50 uppercase">Now planning</p>
-            <p className="mt-1 font-semibold">Coorg Escape</p>
-            <p className="text-sm text-white/60">Dec 20 – 23 · 5 travellers</p>
-            <div className="mt-3 flex items-center gap-2 text-sm text-primary">
-              <CheckCircle2 className="size-4" />
-              Plan approved by 4 of 5
-            </div>
-          </div>
-          <p className="max-w-[12rem] text-right text-xs leading-relaxed text-white/45">
-            Built for the SerpApi Hackathon · Travel &amp; Local Discovery
-          </p>
-        </div>
+        <span aria-hidden />
       </div>
 
       {/* Sign-in */}
@@ -203,7 +147,7 @@ export default async function LoginPage({
                   </Button>
                 </form>
                 <p className="mt-2 text-center text-xs text-muted-foreground">
-                  Skips Google — signs you in with any email while developing.
+                  Skips Google. Signs you in with any email while developing.
                 </p>
               </>
             )}

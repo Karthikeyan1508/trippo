@@ -128,7 +128,7 @@ export function PreferenceForm({
       if (res.ok) {
         toast.success(
           firstTime
-            ? "Thanks — your preferences are in"
+            ? "Thanks. Your preferences are in"
             : "Preferences saved"
         )
         setSaved(true)
@@ -152,7 +152,7 @@ export function PreferenceForm({
               <FormItem>
                 <FormLabel>Age</FormLabel>
                 <FormControl>
-                  <Input type="number" min={1} placeholder="—" {...field} />
+                  <Input type="number" min={1} placeholder="Any" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

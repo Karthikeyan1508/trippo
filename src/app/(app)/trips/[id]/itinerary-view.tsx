@@ -61,7 +61,7 @@ export function ItineraryView({
 
       {itinerary.days.map((day) => (
         <div key={day.id} className="rounded-2xl border bg-card">
-          {/* Day header — sticky while its stops scroll */}
+          {/* Day header, sticky while its stops scroll */}
           <div className="sticky top-14 z-20 flex items-center gap-3 rounded-t-2xl border-b bg-muted px-5 py-3 shadow-sm">
             <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-brand">
               Day {day.dayNumber}

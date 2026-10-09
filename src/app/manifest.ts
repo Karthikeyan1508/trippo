@@ -3,9 +3,9 @@ import type { MetadataRoute } from "next"
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Trippo — group travel, in sync",
+    name: "Trippo: group travel, in sync",
     short_name: "Trippo",
-    description: "Plan, coordinate and travel together — even when signal drops.",
+    description: "Plan, coordinate and travel together. Even when signal drops.",
     start_url: "/dashboard?source=pwa",
     scope: "/",
     display: "standalone",

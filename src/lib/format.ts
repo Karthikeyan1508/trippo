@@ -3,9 +3,9 @@ import { format } from "date-fns"
 export function formatDateRange(start: Date, end: Date) {
   const sameYear = start.getFullYear() === end.getFullYear()
   const sameMonth = sameYear && start.getMonth() === end.getMonth()
-  if (sameMonth) return `${format(start, "d")}–${format(end, "d MMM yyyy")}`
-  if (sameYear) return `${format(start, "d MMM")} – ${format(end, "d MMM yyyy")}`
-  return `${format(start, "d MMM yyyy")} – ${format(end, "d MMM yyyy")}`
+  if (sameMonth) return `${format(start, "d")}-${format(end, "d MMM yyyy")}`
+  if (sameYear) return `${format(start, "d MMM")} - ${format(end, "d MMM yyyy")}`
+  return `${format(start, "d MMM yyyy")} - ${format(end, "d MMM yyyy")}`
 }
 
 export function tripDurationDays(start: Date, end: Date) {

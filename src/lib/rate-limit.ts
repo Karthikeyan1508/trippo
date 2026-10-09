@@ -1,7 +1,7 @@
 /**
  * Tiny fixed-window limiter, keyed by an arbitrary string (e.g. a user id).
  *
- * In-memory, so each server instance counts separately — good enough to stop
+ * In-memory, so each server instance counts separately, good enough to stop
  * a runaway client from burning paid API credits, not a security boundary.
  */
 const hits = new Map<string, { count: number; resetAt: number }>()

@@ -13,7 +13,7 @@ export type Audience =
 
 export type NotifyInput = {
   tripId?: string
-  /** Whoever triggered it — never notified about their own action. */
+  /** Whoever triggered it, never notified about their own action. */
   actorId?: string
   to: Audience
   type: NotificationType

@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/session"
 import { NotificationsList } from "@/components/notifications-list"
 import { listNotifications } from "@/server/notifications"
 
-export const metadata = { title: "Notifications — Trippo" }
+export const metadata = { title: "Notifications | Trippo" }
 
 export default async function NotificationsPage() {
   await requireUser()

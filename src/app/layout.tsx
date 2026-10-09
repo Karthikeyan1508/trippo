@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     apple: [{ url: "/icons/apple-180.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: { capable: true, title: "Trippo", statusBarStyle: "black-translucent" },
-  title: "Trippo — Plan group trips together",
+  title: "Trippo | Plan group trips together",
   description:
     "The single source of truth for your group trip: preferences, AI itineraries, live location, and shared budgets in one place.",
 }
@@ -50,8 +50,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={cn("h-full antialiased font-sans", spaceGrotesk.variable, geistMono.variable)}
     >
       <body className="min-h-full flex flex-col">
-        <ShaderBackground />
-        <Providers>{children}</Providers>
+        <Providers>
+          <ShaderBackground />
+          {children}
+        </Providers>
         <Toaster richColors position="top-center" />
       </body>
     </html>

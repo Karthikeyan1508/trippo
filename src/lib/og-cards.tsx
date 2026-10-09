@@ -5,7 +5,7 @@ import { formatDateRange, tripDurationDays } from "@/lib/format"
 
 /**
  * Share-preview cards (Open Graph / Twitter), drawn on demand with Satori.
- * Everything here is plain inline-styled JSX — Satori supports a CSS subset,
+ * Everything here is plain inline-styled JSX, Satori supports a CSS subset,
  * and every element with more than one child must be `display: flex`.
  */
 
@@ -115,14 +115,14 @@ export function brandCard() {
                 display: "flex",
                 flexWrap: "wrap",
                 marginTop: 18,
-                fontSize: 74,
+                fontSize: 110,
                 fontWeight: 700,
                 lineHeight: 1.05,
                 letterSpacing: -2,
               }}
             >
-              <span>Group trips, minus the group chat&nbsp;</span>
-              <span style={{ color: LIME }}>chaos.</span>
+              <span>Less group chat.&nbsp;</span>
+              <span style={{ color: LIME }}>More trip.</span>
             </div>
           </div>
           <div style={{ display: "flex", gap: 14 }}>

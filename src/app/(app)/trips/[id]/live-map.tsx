@@ -381,7 +381,7 @@ export function LiveMap({
         </div>
         <div className={`flex items-start gap-3 rounded-xl border p-4 ${nearbyCheckpoint?.type === "DANGER" ? "border-destructive/40 bg-destructive/5" : "bg-card"}`}>
           <div className={`grid size-9 shrink-0 place-items-center rounded-lg ${nearbyCheckpoint ? "bg-primary/10 text-brand" : "bg-muted text-muted-foreground"}`}><BellRing className="size-5" /></div>
-          <div><p className="text-sm font-medium">{nearbyCheckpoint ? `Near ${nearbyCheckpoint.name}` : "No nearby checkpoint"}</p><p className="mt-0.5 text-xs leading-5 text-muted-foreground">{nearbyCheckpoint?.type === "DANGER" ? "Caution zone — check in with the group." : nearbyCheckpoint ? "You’re inside the checkpoint radius." : "Your next proximity update will appear here."}</p></div>
+          <div><p className="text-sm font-medium">{nearbyCheckpoint ? `Near ${nearbyCheckpoint.name}` : "No nearby checkpoint"}</p><p className="mt-0.5 text-xs leading-5 text-muted-foreground">{nearbyCheckpoint?.type === "DANGER" ? "Caution zone. Check in with the group." : nearbyCheckpoint ? "You’re inside the checkpoint radius." : "Your next proximity update will appear here."}</p></div>
         </div>
       </div>
 

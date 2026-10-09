@@ -51,7 +51,7 @@ export async function generateMetadata({
   // Invite links are for the crew, not for search engines.
   const robots = { index: false, follow: false }
   if (!trip || trip.status === "ARCHIVED") {
-    return { title: "Trip invite — Trippo", robots }
+    return { title: "Trip invite | Trippo", robots }
   }
 
   const inviter = (trip.members.find((m) => m.role === "ADMIN") ?? trip.members[0])?.user.name
@@ -91,7 +91,7 @@ export default async function JoinPage({
     ? (trip.members.find((m) => m.role === "ADMIN") ?? trip.members[0])
     : undefined
 
-  // Already on the trip — skip straight to it.
+  // Already on the trip, skip straight to it.
   if (trip && session?.user?.id) {
     if (trip.members.some((m) => m.userId === session.user.id)) {
       redirect(`/trips/${trip.id}`)
@@ -175,7 +175,7 @@ export default async function JoinPage({
                     </Link>
                   </Button>
                   <p className="text-center text-xs text-muted-foreground">
-                    Takes a few seconds — you&apos;ll come straight back here.
+                    Takes a few seconds. You&apos;ll come straight back here.
                   </p>
                 </div>
               )}

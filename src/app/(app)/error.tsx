@@ -21,7 +21,7 @@ export default function AppError({
         </div>
         <h1 className="mt-5 text-2xl font-semibold tracking-tight">Something went wrong</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          That didn&apos;t load. It&apos;s usually temporary — try again, or head back to
+          That didn&apos;t load. It&apos;s usually temporary. Try again, or head back to
           your trips.
         </p>
         {error.digest && (

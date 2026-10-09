@@ -54,7 +54,7 @@ async function editableItem(itemId: string) {
     select: { id: true },
   })
   if (latest?.id !== item.day.itineraryId) {
-    return { ok: false, error: "This plan was replaced — refresh to see the latest." } as const
+    return { ok: false, error: "This plan was replaced. Refresh to see the latest." } as const
   }
   return {
     ok: true,
@@ -83,7 +83,7 @@ async function afterEdit(
       actorId: actor.id,
       to: "voters",
       type: "plan_changed",
-      title: "The plan changed — please vote again",
+      title: "The plan changed. Please vote again",
       body: trip?.name,
       url: tripUrl(tripId, "itinerary"),
     })

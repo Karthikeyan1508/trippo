@@ -160,13 +160,13 @@ export function ApprovalPanel({
       <div className="border-t bg-muted/20 px-5 py-4">
         {locked ? (
           <p className="text-center text-sm text-muted-foreground">
-            No further votes needed — you&apos;re all set.
+            No further votes needed. You&apos;re all set.
           </p>
         ) : canApprove ? (
           <ApprovalControls itineraryId={itineraryId} myStatus={myStatus} />
         ) : (
           <p className="text-sm text-muted-foreground">
-            You&apos;re an observer — you can view the plan but not vote.
+            You&apos;re an observer. You can view the plan but not vote.
           </p>
         )}
       </div>

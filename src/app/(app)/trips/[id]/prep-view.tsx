@@ -55,7 +55,7 @@ export function PrepView({ prep }: { prep: PrepData }) {
                   className="rounded-lg bg-muted/40 px-3 py-2 text-sm"
                 >
                   <span className="font-medium">{p.phrase}</span>
-                  <span className="text-muted-foreground"> — {p.meaning}</span>
+                  <span className="text-muted-foreground">: {p.meaning}</span>
                 </li>
               ))}
             </ul>

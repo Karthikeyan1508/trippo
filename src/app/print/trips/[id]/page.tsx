@@ -206,7 +206,7 @@ export default async function PrintPage({
                     {phrases.map((p, i) => (
                       <li key={i}>
                         <span className="font-medium">{p.phrase}</span>
-                        <span className="text-neutral-500"> — {p.meaning}</span>
+                        <span className="text-neutral-500">: {p.meaning}</span>
                       </li>
                     ))}
                   </ul>
@@ -240,7 +240,7 @@ export default async function PrintPage({
 
       {!itinerary && !prep && (
         <p className="mt-8 text-neutral-500">
-          Nothing to print yet — generate the itinerary and prep guide first.
+          Nothing to print yet. Generate the itinerary and prep guide first.
         </p>
       )}
 

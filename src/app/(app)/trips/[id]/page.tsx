@@ -382,7 +382,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
               <div>
                 <h3 className="font-medium">My preferences</h3>
                 <p className="text-sm text-muted-foreground">
-                  These shape the plan for everyone — the more the group shares, the better
+                  These shape the plan for everyone. The more the group shares, the better
                   the itinerary. Only you can edit yours.
                 </p>
               </div>
@@ -522,7 +522,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
               <div>
                 <h3 className="font-medium">Visual story</h3>
                 <p className="text-sm text-muted-foreground">
-                  A cinematic fly-through of your trip — 3D map, photos of each place, and
+                  A cinematic fly-through of your trip: 3D map, photos of each place, and
                   a voice-over.
                 </p>
               </div>
@@ -535,7 +535,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
                   </div>
                   <h3 className="text-lg font-semibold">No story yet</h3>
                   <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                    Generate an itinerary first — the story is built from your located stops.
+                    Generate an itinerary first. The story is built from your located stops.
                   </p>
                 </div>
               )}

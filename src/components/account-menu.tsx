@@ -20,7 +20,7 @@ export type AccountUser = {
 }
 
 /**
- * Body of the signed-in user's dropdown — shared by the app header and the
+ * Body of the signed-in user's dropdown, shared by the app header and the
  * trip sidebar so the account actions are identical everywhere.
  */
 export function AccountMenuItems({ user }: { user: AccountUser }) {

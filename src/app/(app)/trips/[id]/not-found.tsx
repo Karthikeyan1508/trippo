@@ -15,7 +15,7 @@ export default function TripNotFound() {
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           It may have been deleted, or you haven&apos;t joined it yet. If a friend
-          sent you an invite link, open that link to join — it won&apos;t work from
+          sent you an invite link, open that link to join. It won&apos;t work from
           this page.
         </p>
         <Button asChild className="mt-6">

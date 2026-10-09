@@ -68,7 +68,7 @@ export function ActivityIcon({
   return React.createElement(iconForKey(iconKey), { className })
 }
 
-/** SVG markup for a key's icon — used to draw markers on Leaflet/MapLibre maps. */
+/** SVG markup for a key's icon, used to draw markers on Leaflet/MapLibre maps. */
 export function activityIconSvg(
   iconKey: string,
   opts?: { color?: string; size?: number; strokeWidth?: number }

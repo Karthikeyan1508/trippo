@@ -333,7 +333,7 @@ function ApprovalSummary({ approval }: { approval: PlanApprovalSummary }) {
           <>
             <p className="text-sm text-muted-foreground">
               {approval.locked
-                ? "Everyone approved — the plan is locked in."
+                ? "Everyone approved. The plan is locked in."
                 : `${approval.approved} of ${approval.total} have approved.`}
             </p>
             <Progress value={pct} className="mt-2 h-1.5" />
@@ -404,7 +404,7 @@ export function PollsPanel({
           </div>
           <p className="mt-4 font-medium">No open questions</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-            When the group can&apos;t agree — where to stay, how to get around — put it
+            When the group can&apos;t agree on where to stay or how to get around, put it
             to a vote.
           </p>
           {canVote && (

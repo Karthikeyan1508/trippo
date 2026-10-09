@@ -45,7 +45,7 @@ const features = [
   {
     icon: UsersRound,
     title: "One crew, one source of truth",
-    body: "Roles for admins, members and observers — and a clear view of who's ready.",
+    body: "Roles for admins, members and observers, plus a clear view of who's ready.",
   },
   {
     icon: Sparkles,
@@ -74,7 +74,7 @@ const features = [
   },
 ]
 
-/** A static, illustrative slice of the product — the "money shot" of the hero. */
+/** A static, illustrative slice of the product, the "money shot" of the hero. */
 function ProductPreview() {
   return (
     <div className="relative mx-auto w-full max-w-md lg:max-w-none">
@@ -203,7 +203,7 @@ export default async function LandingPage() {
             Group trips, minus the group-chat chaos.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-muted-foreground">
-            One place to go from “where should we go?” to “who owes whom ₹340?” —
+            One place to go from “where should we go?” to “who owes whom ₹340?”:
             preferences, a plan built from real places, votes, prep, a live map and a
             shared budget.
           </p>

@@ -185,7 +185,7 @@ export async function getTripStory(tripId: string): Promise<TripStory> {
 
   const fallbackLine = (s: (typeof raw)[number]) =>
     `${s.title}${
-      s.placeName && s.placeName !== s.title ? ` — ${s.placeName}` : ""
+      s.placeName && s.placeName !== s.title ? `, ${s.placeName}` : ""
     }.`
 
   const scenes: StoryScene[] = raw.map((s, i) => {

@@ -25,7 +25,7 @@ export function GeneratePrepButton({
         toast.success(
           res.source === "AI"
             ? "Prep guide ready ✨"
-            : "Sample prep created — add keys for a tailored guide."
+            : "Sample prep created. Add keys for a tailored guide."
         )
         router.refresh()
       } else {

@@ -3,10 +3,10 @@ import { ImageResponse } from "next/og"
 /**
  * App icons, drawn on demand from the brand mark (a compass on lime), so there
  * are no binary assets to keep in sync:
- *   /icons/192.png  /icons/512.png          – standard "any" icons
- *   /icons/maskable-512.png                 – extra padding for adaptive icon masks
- *   /icons/apple-180.png                    – iOS home-screen icon
- *   /icons/badge-96.png                     – monochrome glyph for the notification tray
+ *   /icons/192.png  /icons/512.png          - standard "any" icons
+ *   /icons/maskable-512.png                 - extra padding for adaptive icon masks
+ *   /icons/apple-180.png                    - iOS home-screen icon
+ *   /icons/badge-96.png                     - monochrome glyph for the notification tray
  */
 
 const LIME = "#8be000"

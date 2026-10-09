@@ -1,7 +1,7 @@
 import { prettifyEnum } from "@/lib/format"
 
 /**
- * Context-aware icon KEY for an itinerary item — meal type for food and
+ * Context-aware icon KEY for an itinerary item, meal type for food and
  * transport mode for travel. Maps to a Lucide icon in activity-icon.tsx.
  * Data-only so it is safe on the server (story builder) and client.
  */

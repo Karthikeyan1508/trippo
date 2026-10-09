@@ -318,7 +318,7 @@ export async function updateMemberRole(
   if (role !== "ADMIN" && (await isLastAdmin(tripId, target.userId))) {
     return {
       ok: false,
-      error: "Make someone else an admin first — a trip needs at least one.",
+      error: "Make someone else an admin first. A trip needs at least one.",
     }
   }
   await prisma.tripMember.update({ where: { id: memberId }, data: { role } })

@@ -70,7 +70,7 @@ export function InviteDialog({
   )
 
   const link = `${origin}/join/${joinCode}`
-  const message = `Join me on "${tripName}" on Trippo — tell us how you like to travel and help shape the plan: ${link}`
+  const message = `Join me on "${tripName}" on Trippo. Tell us how you like to travel and help shape the plan: ${link}`
 
   const form = useForm<InviteInput>({
     resolver: zodResolver(inviteSchema),
@@ -84,7 +84,7 @@ export function InviteDialog({
       toast.success("Invite link copied")
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      toast.error("Couldn't copy — select the link and copy it manually.")
+      toast.error("Couldn't copy. Select the link and copy it manually.")
     }
   }
 
@@ -99,7 +99,7 @@ export function InviteDialog({
   function resetLink() {
     startReset(async () => {
       const res = await regenerateJoinCode(tripId)
-      if (res.ok) toast.success("New invite link created — the old one no longer works.")
+      if (res.ok) toast.success("New invite link created. The old one no longer works.")
       else toast.error(res.error)
     })
   }
@@ -111,7 +111,7 @@ export function InviteDialog({
         toast.success(
           res.added
             ? "Added to the trip"
-            : "Saved — they'll join automatically when they sign in with that email."
+            : "Saved. They'll join automatically when they sign in with that email."
         )
         form.reset({ email: "", role: "MEMBER" })
       } else {
@@ -232,7 +232,7 @@ export function InviteDialog({
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Trippo doesn&apos;t send emails — they&apos;re added the moment they
+                  Trippo doesn&apos;t send emails. They&apos;re added the moment they
                   sign in with this address, so share the link too.
                 </p>
                 <DialogFooter>
