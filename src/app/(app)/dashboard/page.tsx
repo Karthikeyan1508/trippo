@@ -7,9 +7,7 @@ import { tripAttention, tripPhase, phaseLabel } from "@/lib/journey"
 import { effectiveStatus } from "@/lib/trip-status"
 import { resolveCovers } from "@/server/cover"
 import { Button } from "@/components/ui/button"
-import { listNotifications } from "@/server/notifications"
 import { CreateTripDialog } from "./create-trip-dialog"
-import { NotificationsPanel } from "./notifications-panel"
 import { TripCard, type TripCardData } from "./trip-card"
 
 function Section({
@@ -64,7 +62,12 @@ export default async function DashboardPage() {
 
   // Destination photos: looked up once per trip, then served from the database.
   const covers = await resolveCovers(trips)
-  const notifications = await listNotifications(5)
+  const unreadRows = await prisma.notification.groupBy({
+    by: ["tripId"],
+    where: { userId: user.id, readAt: null, tripId: { in: trips.map((t) => t.id) } },
+    _count: { _all: true },
+  })
+  const unreadByTrip = new Map(unreadRows.map((r) => [r.tripId, r._count._all]))
 
   const cards: (TripCardData & { phase: "upcoming" | "ongoing" | "past" })[] =
     trips.map((t) => {
@@ -80,6 +83,7 @@ export default async function DashboardPage() {
         phaseText: phaseLabel(t.startDate, t.endDate),
         phase: tripPhase(t.startDate, t.endDate).phase,
         coverImage: covers.get(t.id) || null,
+        unread: unreadByTrip.get(t.id) ?? 0,
         memberCount: t.members.length,
         myRole: t.members.find((m) => m.userId === user.id)?.role ?? "MEMBER",
         attention: tripAttention({
@@ -124,8 +128,6 @@ export default async function DashboardPage() {
         </div>
         {cards.length > 0 && <CreateTripDialog />}
       </div>
-
-      <NotificationsPanel initial={notifications} />
 
       {cards.length === 0 ? (
         <div className="mt-10 flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-16 text-center">

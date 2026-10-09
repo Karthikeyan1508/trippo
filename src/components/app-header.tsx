@@ -8,7 +8,6 @@ import { cn } from "cn"
 import { Logo } from "@/components/logo"
 import { AccountMenuItems, type AccountUser } from "@/components/account-menu"
 import { initialsOf } from "@/lib/initials"
-import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggleButton } from "@/components/theme-switcher"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -22,13 +21,7 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: Settings },
 ]
 
-export function AppHeader({
-  user,
-  unreadCount = 0,
-}: {
-  user: AccountUser
-  unreadCount?: number
-}) {
+export function AppHeader({ user }: { user: AccountUser }) {
   const pathname = usePathname()
 
   // Trip pages render their own full-height sidebar chrome (with the same
@@ -63,7 +56,6 @@ export function AppHeader({
         </div>
 
         <div className="flex items-center gap-1">
-          <NotificationBell initialUnread={unreadCount} />
           <ThemeToggleButton />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

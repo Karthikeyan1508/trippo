@@ -18,7 +18,13 @@ function dayLabel(iso: string) {
 }
 
 /** Full inbox: filter by unread, grouped by day, mark-all-read. */
-export function NotificationsList({ initial }: { initial: NotificationData[] }) {
+export function NotificationsList({
+  tripId,
+  initial,
+}: {
+  tripId: string
+  initial: NotificationData[]
+}) {
   const [items, setItems] = React.useState(initial)
   const [filter, setFilter] = React.useState<"all" | "unread">("all")
 
@@ -31,7 +37,7 @@ export function NotificationsList({ initial }: { initial: NotificationData[] }) 
 
   async function markAll() {
     setItems((prev) => prev.map((n) => ({ ...n, read: true })))
-    await markAllNotificationsRead()
+    await markAllNotificationsRead(tripId)
   }
 
   // Group consecutive items by calendar day (items arrive newest first).
@@ -80,7 +86,7 @@ export function NotificationsList({ initial }: { initial: NotificationData[] }) 
             {filter === "unread" ? "Nothing unread" : "No notifications yet"}
           </p>
           <p className="mx-auto mt-1 max-w-xs text-xs text-muted-foreground">
-            When your crew votes, opens a poll, suggests gear or adds an expense, you&apos;ll see it here.
+            When your crew votes, opens a poll, suggests gear or adds an expense on this trip, you&apos;ll see it here.
           </p>
         </div>
       ) : (

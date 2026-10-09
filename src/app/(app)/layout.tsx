@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
 import { AppHeader } from "@/components/app-header"
 
@@ -8,16 +7,10 @@ export default async function AppLayout({
   children: React.ReactNode
 }) {
   const user = await requireUser()
-  const unreadCount = await prisma.notification.count({
-    where: { userId: user.id, readAt: null },
-  })
 
   return (
     <div className="flex min-h-full flex-col">
-      <AppHeader
-        user={{ name: user.name, email: user.email, image: user.image }}
-        unreadCount={unreadCount}
-      />
+      <AppHeader user={{ name: user.name, email: user.email, image: user.image }} />
       <main className="flex-1">{children}</main>
     </div>
   )

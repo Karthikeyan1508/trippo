@@ -24,6 +24,9 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { resolveCovers } from "@/server/cover"
+import { listNotifications } from "@/server/notifications"
+import { NotificationsList } from "@/components/notifications-list"
+import { LocationBanner, LocationProvider } from "@/components/location-provider"
 import { allowedTabs } from "./nav-config"
 import { TripTabs } from "./trip-tabs"
 import { TripNav, type NavBadges } from "./trip-nav"
@@ -83,7 +86,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
   }
 
   // Everything below is independent of each other, so load it together.
-  const [itinerary, expenses, settlements, polls, checklist, products, unreadCount] = await Promise.all([
+  const [itinerary, expenses, settlements, polls, checklist, products, notifications] = await Promise.all([
     prisma.itinerary.findFirst({
       where: { tripId: id },
       orderBy: { generatedAt: "desc" },
@@ -115,8 +118,9 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
       },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+    listNotifications(id, 100),
   ])
+  const unreadCount = notifications.filter((n) => !n.read).length
 
   // ── Approval state ────────────────────────────────────────────────
   const approvalOf = (userId: string): ApprovalStatus =>
@@ -228,6 +232,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
   if (isVoter && openPollsToVote > 0) badges.decisions = openPollsToVote
   // Crew picks this person hasn't weighed in on (and didn't suggest themselves).
   if (products.some((p) => !p.votes.some((v) => v.userId === user.id))) badges.gear = "dot"
+  if (unreadCount > 0) badges.notifications = unreadCount
 
   // ── Props for forms / sub-views ───────────────────────────────────
   const p = myMember.preference
@@ -289,6 +294,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
   ]
 
   return (
+    <LocationProvider tripId={trip.id}>
     <TripTabs defaultTab="overview" allowed={allowedTabs(isAdmin)}>
       <SidebarProvider>
         <Sidebar collapsible="icon">
@@ -310,11 +316,14 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
 
         <SidebarInset className="min-w-0">
           <TripTopBar
+            tripId={trip.id}
             tripName={trip.name}
             isAdmin={isAdmin}
             unreadCount={unreadCount}
             actions={isVoter ? <InviteDialog {...invite} /> : null}
           />
+
+          <LocationBanner />
 
           <div className="min-w-0 flex-1 px-4 pb-10 lg:px-6">
             <TabsPrimitive.Content value="overview">
@@ -478,13 +487,24 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
               />
             </TabsPrimitive.Content>
 
+            <TabsPrimitive.Content value="notifications" className="mx-auto w-full max-w-3xl space-y-5 pt-5">
+              <div>
+                <h3 className="font-medium">Notifications</h3>
+                <p className="text-sm text-muted-foreground">
+                  Everything that happened on {trip.name}. Click one to jump straight to it.
+                </p>
+              </div>
+              <NotificationsList tripId={trip.id} initial={notifications} />
+            </TabsPrimitive.Content>
+
             <TabsPrimitive.Content value="live" className="space-y-5 pt-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="font-medium">Live map</h3>
                   <p className="text-sm text-muted-foreground">
                     See the crew, drop meeting points and get a heads-up near saved spots.
-                    Sharing is opt-in and stops on its own after 30 minutes of silence.
+                    Your location is shared with this crew while Trippo is open on your device.
+                    When someone&apos;s location is off, you see where they were last.
                   </p>
                 </div>
                 <TripModeControls />
@@ -544,6 +564,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
         </SidebarInset>
       </SidebarProvider>
     </TripTabs>
+    </LocationProvider>
   )
 }
 

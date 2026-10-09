@@ -25,12 +25,6 @@ export default function manifest(): MetadataRoute.Manifest {
         url: "/dashboard",
         icons: [{ src: "/icons/192.png", sizes: "192x192", type: "image/png" }],
       },
-      {
-        name: "Notifications",
-        short_name: "Inbox",
-        url: "/notifications",
-        icons: [{ src: "/icons/192.png", sizes: "192x192", type: "image/png" }],
-      },
     ],
   }
 }

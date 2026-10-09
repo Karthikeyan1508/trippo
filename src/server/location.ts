@@ -9,13 +9,23 @@ type CheckpointTypeT = "POINT" | "STAY" | "FOOD" | "MEETING" | "DANGER"
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
+/**
+ * live: the device reported a moment ago.
+ * off:  it stopped (blocked, switched off, app closed); the last known spot is shown, greyed out.
+ * none: this person hasn't shared a location yet.
+ */
+export type LiveStatus = "live" | "off" | "none"
+
 export type LiveMember = {
   userId: string
   name: string | null
   image: string | null
-  lat: number
-  lng: number
-  updatedAt: string
+  lat: number | null
+  lng: number | null
+  updatedAt: string | null
+  status: LiveStatus
+  /** Why a device went quiet: "denied", "unavailable", or "stale" (just stopped reporting). */
+  offReason: string | null
   isMe: boolean
 }
 
@@ -54,58 +64,79 @@ export async function updateMyLocation(
   await prisma.memberLocation.upsert({
     where: { tripId_userId: { tripId, userId: user.id } },
     create: { tripId, userId: user.id, lat, lng, accuracy: accuracy ?? null },
-    update: { lat, lng, accuracy: accuracy ?? null },
+    update: { lat, lng, accuracy: accuracy ?? null, sharing: true, offReason: null },
   })
   return { ok: true }
 }
 
-/** Stop sharing: remove the current member's live location. */
-export async function stopSharingLocation(tripId: string): Promise<ActionResult> {
+/**
+ * The device says location is blocked or switched off. The last known position
+ * stays on the crew's map, greyed out, with the reason.
+ */
+export async function reportLocationOff(
+  tripId: string,
+  reason: "denied" | "unavailable"
+): Promise<ActionResult> {
   const user = await requireUser()
-  await prisma.memberLocation.deleteMany({
+  const member = await membership(tripId, user.id)
+  if (!member) return { ok: false, error: "You're not a member of this trip." }
+  await prisma.memberLocation.updateMany({
     where: { tripId, userId: user.id },
+    data: { sharing: false, offReason: reason },
   })
   return { ok: true }
 }
 
-/** A shared location is only trusted (and kept) for this long without a refresh. */
-const LOCATION_TTL_MS = 30 * 60 * 1000
+/** A device that reported within this window counts as live. */
+const LIVE_WINDOW_MS = 2 * 60 * 1000
+/** Last known positions are kept this long after the last update, then deleted. */
+const RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
-/** Poll target: all members' live locations + checkpoints for a trip. */
+/** Poll target: every member's live (or last known) location + checkpoints for a trip. */
 export async function getLiveData(tripId: string): Promise<LiveData> {
   const user = await requireUser()
   const member = await membership(tripId, user.id)
   if (!member) return { ok: false, error: "You're not a member of this trip." }
 
-  // Privacy: someone who closed the tab without switching sharing off must
-  // not stay on the group map forever. Purge anything that stopped updating.
-  const cutoff = new Date(Date.now() - LOCATION_TTL_MS)
+  // Privacy: a last known position isn't kept forever.
   await prisma.memberLocation.deleteMany({
-    where: { tripId, updatedAt: { lt: cutoff } },
+    where: { tripId, updatedAt: { lt: new Date(Date.now() - RETENTION_MS) } },
   })
 
-  const [locations, checkpoints] = await Promise.all([
-    prisma.memberLocation.findMany({
-      where: { tripId },
-      include: { user: true },
+  const [members, locations, checkpoints] = await Promise.all([
+    prisma.tripMember.findMany({
+      where: { tripId, status: "ACTIVE" },
+      orderBy: { joinedAt: "asc" },
+      include: { user: { select: { id: true, name: true, email: true, image: true } } },
     }),
+    prisma.memberLocation.findMany({ where: { tripId } }),
     prisma.checkpoint.findMany({
       where: { tripId },
       orderBy: { createdAt: "asc" },
     }),
   ])
 
+  const now = Date.now()
+  const byUser = new Map(locations.map((l) => [l.userId, l]))
+
   return {
     ok: true,
-    members: locations.map((l) => ({
-      userId: l.userId,
-      name: l.user.name,
-      image: l.user.image,
-      lat: l.lat,
-      lng: l.lng,
-      updatedAt: l.updatedAt.toISOString(),
-      isMe: l.userId === user.id,
-    })),
+    members: members.map((m) => {
+      const loc = byUser.get(m.userId)
+      const fresh = loc ? now - loc.updatedAt.getTime() < LIVE_WINDOW_MS : false
+      const status: LiveStatus = !loc ? "none" : loc.sharing && fresh ? "live" : "off"
+      return {
+        userId: m.userId,
+        name: m.user.name ?? m.user.email?.split("@")[0] ?? null,
+        image: m.user.image,
+        lat: loc?.lat ?? null,
+        lng: loc?.lng ?? null,
+        updatedAt: loc?.updatedAt.toISOString() ?? null,
+        status,
+        offReason: status === "off" ? (loc?.sharing ? "stale" : (loc?.offReason ?? "unavailable")) : null,
+        isMe: m.userId === user.id,
+      }
+    }),
     checkpoints: checkpoints.map((c) => ({
       id: c.id,
       name: c.name,

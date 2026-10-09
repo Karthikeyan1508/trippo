@@ -18,6 +18,7 @@ export type NavIcon =
   | "live"
   | "budget"
   | "story"
+  | "notifications"
 
 export type NavItem = {
   value: string
@@ -44,6 +45,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { value: "preferences", label: "My preferences", icon: "preferences" },
       { value: "decisions", label: "Decisions", icon: "decisions" },
       { value: "members", label: "Crew", icon: "crew" },
+      { value: "notifications", label: "Notifications", icon: "notifications" },
       { value: "insights", label: "Group insights", icon: "insights", adminOnly: true },
       { value: "settings", label: "Trip settings", icon: "settings", adminOnly: true },
     ],

@@ -89,7 +89,7 @@ export async function sendTestNotification(): Promise<Result<TestResult>> {
   const res = await sendPush([user.id], {
     title: "Trippo notifications are working",
     body: "You'll hear about plan votes, new polls, gear picks and expenses.",
-    url: "/notifications",
+    url: "/dashboard",
     tag: `test:${Date.now()}`,
   })
   return {

@@ -3,6 +3,7 @@
 import { Tabs as TabsPrimitive } from "radix-ui"
 import {
   BarChart3,
+  Bell,
   BedDouble,
   Clapperboard,
   LayoutDashboard,
@@ -43,6 +44,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   live: MapIcon,
   budget: Wallet,
   story: Clapperboard,
+  notifications: Bell,
 }
 
 /** Sections that need this person's attention show a dot. Nothing else is counted. */
@@ -90,11 +92,21 @@ export function TripNav({
                       </TabsPrimitive.Trigger>
                       {needsAttention && (
                         <SidebarMenuBadge className="top-1/2! right-3 -translate-y-1/2">
-                          <span
-                            className="size-1.5 bg-primary"
-                            role="img"
-                            aria-label="Needs your attention"
-                          />
+                          {item.value === "notifications" && typeof badges[item.value] === "number" ? (
+                            <span
+                              className="grid min-w-4 place-items-center bg-primary px-1 text-[10px] leading-4 font-semibold text-primary-foreground tabular-nums"
+                              role="img"
+                              aria-label={`${badges[item.value]} unread`}
+                            >
+                              {(badges[item.value] as number) > 9 ? "9+" : badges[item.value]}
+                            </span>
+                          ) : (
+                            <span
+                              className="size-1.5 bg-primary"
+                              role="img"
+                              aria-label="Needs your attention"
+                            />
+                          )}
                         </SidebarMenuBadge>
                       )}
                     </SidebarMenuItem>

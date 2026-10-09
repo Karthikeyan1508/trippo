@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { Bell, CheckCheck } from "lucide-react"
 
 import type { NotificationData } from "@/lib/notifications"
@@ -12,13 +11,21 @@ import {
 } from "@/server/notifications"
 import { NotificationRow, useOpenNotification } from "@/components/notification-row"
 import { Button } from "@/components/ui/button"
+import { useTripTab } from "@/app/(app)/trips/[id]/trip-tabs"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const POLL_MS = 45_000
 
-/** Header bell: live unread count, and the latest notifications in a dropdown. */
-export function NotificationBell({ initialUnread = 0 }: { initialUnread?: number }) {
+/** Trip bell: this trip's unread count, and its latest notifications in a dropdown. */
+export function NotificationBell({
+  tripId,
+  initialUnread = 0,
+}: {
+  tripId: string
+  initialUnread?: number
+}) {
+  const { setTab } = useTripTab()
   const [unread, setUnread] = React.useState(initialUnread)
   const [open, setOpen] = React.useState(false)
   const [items, setItems] = React.useState<NotificationData[] | null>(null)
@@ -29,7 +36,7 @@ export function NotificationBell({ initialUnread = 0 }: { initialUnread?: number
     let alive = true
     const refresh = async () => {
       try {
-        const count = await getUnreadCount()
+        const count = await getUnreadCount(tripId)
         if (alive) setUnread(count)
       } catch {
         /* offline or signed out, keep the last known count */
@@ -42,13 +49,13 @@ export function NotificationBell({ initialUnread = 0 }: { initialUnread?: number
       clearInterval(timer)
       window.removeEventListener("focus", refresh)
     }
-  }, [])
+  }, [tripId])
 
   function onOpenChange(next: boolean) {
     setOpen(next)
     if (next) {
       setItems(null)
-      listNotifications(10).then(setItems, () => setItems([]))
+      listNotifications(tripId, 10).then(setItems, () => setItems([]))
     }
   }
 
@@ -60,7 +67,7 @@ export function NotificationBell({ initialUnread = 0 }: { initialUnread?: number
   async function markAll() {
     setItems((prev) => prev?.map((n) => ({ ...n, read: true })) ?? prev)
     setUnread(0)
-    await markAllNotificationsRead()
+    await markAllNotificationsRead(tripId)
   }
 
   return (
@@ -114,7 +121,7 @@ export function NotificationBell({ initialUnread = 0 }: { initialUnread?: number
               <Bell className="mx-auto size-6 text-muted-foreground" />
               <p className="mt-3 text-sm font-medium">You&apos;re all caught up</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Votes, polls, gear picks and expenses show up here.
+                Votes, polls, gear picks and expenses for this trip show up here.
               </p>
             </div>
           ) : (
@@ -135,13 +142,16 @@ export function NotificationBell({ initialUnread = 0 }: { initialUnread?: number
         </div>
 
         <div className="border-t">
-          <Link
-            href="/notifications"
-            onClick={() => setOpen(false)}
-            className="block px-5 py-3 text-center text-xs font-medium tracking-wider uppercase transition-colors hover:bg-foreground/5"
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              setTab("notifications")
+            }}
+            className="block w-full px-5 py-3 text-center text-xs font-medium tracking-wider uppercase transition-colors hover:bg-foreground/5"
           >
             View all notifications
-          </Link>
+          </button>
         </div>
       </PopoverContent>
     </Popover>

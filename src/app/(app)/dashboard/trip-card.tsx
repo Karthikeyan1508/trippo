@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, CalendarDays, Crown, MapPin } from "lucide-react"
+import { ArrowRight, Bell, CalendarDays, Crown, MapPin } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { TripCover } from "@/components/trip-cover"
@@ -24,6 +24,8 @@ export type TripCardData = {
   /** What this person needs to do next on the trip, if anything. */
   attention: string | null
   members: { name: string | null; image: string | null }[]
+  /** Unread notifications for this trip. */
+  unread: number
 }
 
 function initials(name: string | null) {
@@ -41,9 +43,10 @@ export function TripCard({ trip }: { trip: TripCardData }) {
   const extra = trip.memberCount - trip.members.length
 
   return (
+    <div className="group relative transition-transform hover:-translate-y-0.5">
     <Link
       href={`/trips/${trip.id}`}
-      className="group flex flex-col overflow-hidden rounded-2xl border bg-card shadow-xs transition-all hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-lg focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      className="flex h-full flex-col overflow-hidden rounded-2xl border bg-card shadow-xs transition-all group-hover:border-foreground/20 group-hover:shadow-lg focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
     >
       <TripCover src={trip.coverImage} className="flex h-44 flex-col justify-between p-4">
         <div className="flex items-start justify-between gap-2 text-[10px] font-medium tracking-widest uppercase">
@@ -107,5 +110,25 @@ export function TripCard({ trip }: { trip: TripCardData }) {
         </div>
       </div>
     </Link>
+
+    {/* A sibling of the card link (links can't nest): this trip's notifications. */}
+    <Link
+      href={`/trips/${trip.id}?tab=notifications`}
+      aria-label={
+        trip.unread > 0
+          ? `${trip.unread} unread ${trip.unread === 1 ? "notification" : "notifications"} on ${trip.name}`
+          : `Notifications for ${trip.name}`
+      }
+      title={trip.unread > 0 ? `${trip.unread} unread` : "Notifications"}
+      className="absolute top-32 right-3 grid size-9 place-items-center border border-white/25 bg-black/45 text-white backdrop-blur-md transition-colors hover:bg-black/65 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+    >
+      <Bell className={trip.unread > 0 ? "size-4" : "size-4 opacity-70"} />
+      {trip.unread > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 grid min-w-5 place-items-center bg-primary px-1 text-[10px] leading-5 font-semibold text-primary-foreground tabular-nums">
+          {trip.unread > 9 ? "9+" : trip.unread}
+        </span>
+      )}
+    </Link>
+    </div>
   )
 }

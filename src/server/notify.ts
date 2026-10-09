@@ -83,10 +83,16 @@ export async function notify(input: NotifyInput) {
       })),
     })
 
+    // On a device the trip name matters: the same crew action can happen on any of their trips.
+    const trip = input.tripId
+      ? await prisma.trip.findUnique({ where: { id: input.tripId }, select: { name: true } })
+      : null
+    const pushBody = [trip?.name, input.body].filter(Boolean).join(" · ") || undefined
+
     const push = () =>
       sendPush(fresh, {
         title: input.title,
-        body: input.body,
+        body: pushBody,
         url: input.url,
         tag: `${input.type}:${input.url}`,
       }).catch((error) => console.error("Push delivery failed:", error))

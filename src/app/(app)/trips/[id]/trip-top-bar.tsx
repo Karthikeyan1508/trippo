@@ -27,11 +27,13 @@ const LABELS: Record<string, string> = Object.fromEntries(
  * theme, and the invite action (passed in as a slot since it's server-built).
  */
 export function TripTopBar({
+  tripId,
   tripName,
   isAdmin,
   unreadCount,
   actions,
 }: {
+  tripId: string
   tripName: string
   isAdmin: boolean
   unreadCount: number
@@ -70,7 +72,7 @@ export function TripTopBar({
 
       <div className="flex shrink-0 items-center gap-1.5">
         <TripCommand isAdmin={isAdmin} />
-        <NotificationBell initialUnread={unreadCount} />
+        <NotificationBell tripId={tripId} initialUnread={unreadCount} />
         <ThemeToggleButton />
         {actions}
       </div>

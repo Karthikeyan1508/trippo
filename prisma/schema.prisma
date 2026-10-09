@@ -434,6 +434,11 @@ model MemberLocation {
   lat       Float
   lng       Float
   accuracy  Float?
+  // False once the device reports that location is blocked or switched off;
+  // lat/lng then stay as the last known position.
+  sharing   Boolean  @default(true)
+  // "denied" (permission blocked) or "unavailable" (device location is off)
+  offReason String?
   updatedAt DateTime @updatedAt
 
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
