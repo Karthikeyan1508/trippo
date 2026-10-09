@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { cn } from "cn"
 
 import { savePreference } from "@/server/trips"
+import { useTripTab } from "./trip-tabs"
 import {
   preferenceSchema,
   DIETS,
@@ -56,7 +57,7 @@ function ChipGroup({
             className={cn(
               "rounded-full border px-3 py-1.5 text-sm transition-colors",
               active
-                ? "border-primary bg-primary/10 font-medium text-primary"
+                ? "border-primary bg-primary/10 font-medium text-brand"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
@@ -90,7 +91,7 @@ function SingleChipGroup({
             className={cn(
               "rounded-full border px-3 py-1.5 text-sm transition-colors",
               active
-                ? "border-primary bg-primary/10 font-medium text-primary"
+                ? "border-primary bg-primary/10 font-medium text-brand"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
@@ -105,10 +106,14 @@ function SingleChipGroup({
 export function PreferenceForm({
   tripId,
   defaultValues,
+  firstTime = false,
 }: {
   tripId: string
   defaultValues: PreferenceInput
+  /** First submission: continue the journey on the Overview afterwards. */
+  firstTime?: boolean
 }) {
+  const { setTab } = useTripTab()
   const [pending, startTransition] = React.useTransition()
   const [saved, setSaved] = React.useState(false)
 
@@ -121,10 +126,15 @@ export function PreferenceForm({
     startTransition(async () => {
       const res = await savePreference(tripId, values)
       if (res.ok) {
-        toast.success("Preferences saved")
+        toast.success(
+          firstTime
+            ? "Thanks — your preferences are in"
+            : "Preferences saved"
+        )
         setSaved(true)
         form.reset(values)
         setTimeout(() => setSaved(false), 2000)
+        if (firstTime) setTab("overview")
       } else {
         toast.error(res.error)
       }

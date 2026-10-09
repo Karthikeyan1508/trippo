@@ -60,7 +60,7 @@ export const PACES = [
   { value: "PACKED", label: "Packed" },
 ] as const
 
-const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD"] as const
+export const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD"] as const
 
 // ── Helpers ───────────────────────────────────────────────────────────
 

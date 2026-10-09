@@ -65,8 +65,7 @@ export function ActivityIcon({
   iconKey: string
   className?: string
 }) {
-  const Icon = iconForKey(iconKey)
-  return <Icon className={className} />
+  return React.createElement(iconForKey(iconKey), { className })
 }
 
 /** SVG markup for a key's icon — used to draw markers on Leaflet/MapLibre maps. */

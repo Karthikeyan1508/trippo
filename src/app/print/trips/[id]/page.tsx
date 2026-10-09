@@ -50,7 +50,18 @@ export default async function PrintPage({
     (prep?.phrases as { phrase: string; meaning: string }[] | undefined) ?? []
 
   return (
-    <div className="mx-auto max-w-3xl bg-white px-8 py-10 text-neutral-900 print:px-0 print:py-0">
+    <div
+      className="mx-auto max-w-3xl bg-white px-8 py-10 text-neutral-900 print:px-0 print:py-0"
+      // A printed page is always light: pin the accent tokens to their light-mode
+      // values so a dark-mode viewer still gets a legible PDF.
+      style={
+        {
+          "--brand": "oklch(0.47 0.13 131)",
+          "--primary": "oklch(0.841 0.238 128.85)",
+          "--primary-foreground": "oklch(0.405 0.101 131.063)",
+        } as React.CSSProperties
+      }
+    >
       <style>{`
         @page { margin: 1.5cm; }
         html, body { background: #fff; }
@@ -60,9 +71,9 @@ export default async function PrintPage({
       <PrintControls />
 
       {/* Cover */}
-      <header className="border-b-4 border-primary pb-5">
+      <header className="border-b-4 border-brand pb-5">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-bold tracking-[0.2em] text-primary uppercase">
+          <span className="text-sm font-bold tracking-[0.2em] text-brand uppercase">
             Trippo
           </span>
           <span className="text-xs text-neutral-500">
@@ -92,7 +103,7 @@ export default async function PrintPage({
             {itinerary.days.map((day) => (
               <div key={day.id} className="break-inside-avoid">
                 <div className="flex items-baseline gap-2.5">
-                  <span className="rounded bg-primary px-2 py-0.5 text-xs font-semibold text-white">
+                  <span className="rounded bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
                     Day {day.dayNumber}
                   </span>
                   <h3 className="font-semibold">
@@ -108,14 +119,14 @@ export default async function PrintPage({
                 <ul className="mt-2.5 ml-1 space-y-3 border-l border-neutral-200 pl-4">
                   {day.items.map((item) => (
                     <li key={item.id} className="relative">
-                      <span className="absolute top-1.5 -left-[21px] size-2 rounded-full bg-primary ring-2 ring-white" />
+                      <span className="absolute top-1.5 -left-[21px] size-2 rounded-full bg-brand ring-2 ring-white" />
                       <div className="flex gap-3">
                         <span className="w-11 shrink-0 pt-px text-xs tabular-nums text-neutral-500">
                           {item.startTime ?? ""}
                         </span>
                         <div className="min-w-0">
                           <p className="text-sm leading-snug">
-                            <span className="mr-1.5 text-[10px] font-semibold tracking-wide text-primary uppercase">
+                            <span className="mr-1.5 text-[10px] font-semibold tracking-wide text-brand uppercase">
                               {activityLabel(
                                 item.category,
                                 item.title,
@@ -155,13 +166,13 @@ export default async function PrintPage({
           <div className="mt-4 grid gap-6 sm:grid-cols-2">
             {etiquette.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-primary">
+                <h3 className="text-sm font-semibold text-brand">
                   Etiquette &amp; tips
                 </h3>
                 <ul className="mt-1.5 space-y-1 text-sm text-neutral-700">
                   {etiquette.map((t, i) => (
                     <li key={i} className="flex gap-2">
-                      <span className="text-primary">•</span>
+                      <span className="text-brand">•</span>
                       {t}
                     </li>
                   ))}
@@ -172,7 +183,7 @@ export default async function PrintPage({
             <div className="space-y-5">
               {documents.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-primary">
+                  <h3 className="text-sm font-semibold text-brand">
                     Documents to carry
                   </h3>
                   <ul className="mt-1.5 space-y-1 text-sm text-neutral-700">
@@ -188,7 +199,7 @@ export default async function PrintPage({
 
               {phrases.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-primary">
+                  <h3 className="text-sm font-semibold text-brand">
                     Handy phrases
                   </h3>
                   <ul className="mt-1.5 space-y-1 text-sm text-neutral-700">
@@ -206,7 +217,7 @@ export default async function PrintPage({
 
           {packing.length > 0 && (
             <div className="mt-6 break-inside-avoid">
-              <h3 className="text-sm font-semibold text-primary">Packing list</h3>
+              <h3 className="text-sm font-semibold text-brand">Packing list</h3>
               <div className="mt-2 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                 {packing.map((cat, i) => (
                   <div key={i} className="break-inside-avoid">

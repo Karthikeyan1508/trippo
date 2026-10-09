@@ -24,10 +24,9 @@ import {
 import { getTripStory, type TripStory as TripStoryType } from "@/server/story"
 import { Button } from "@/components/ui/button"
 import { ActivityIcon, activityIconSvg } from "@/components/activity-icon"
+import { cssVarToHex } from "@/lib/css-color"
 
 type LoadedStory = Extract<TripStoryType, { ok: true }>
-
-const CORAL = "#e2582f"
 
 const OSM_STYLE = {
   version: 8,
@@ -62,11 +61,13 @@ function loadSvgImage(svg: string): Promise<HTMLImageElement> {
   })
 }
 
-// Draw a Lucide icon (white) inside a coral circle for use as a map marker.
+// Draw a Lucide icon inside a primary-coloured circle for use as a map marker.
 async function makeIconMarker(iconKey: string): Promise<ImageData | null> {
   if (typeof document === "undefined") return null
+  const fill = cssVarToHex("--primary")
+  const ink = cssVarToHex("--primary-foreground", "#1f2e05")
   const svg = activityIconSvg(iconKey, {
-    color: "#ffffff",
+    color: ink,
     size: 22,
     strokeWidth: 2.25,
   })
@@ -80,7 +81,7 @@ async function makeIconMarker(iconKey: string): Promise<ImageData | null> {
   ctx.scale(dpr, dpr)
   ctx.beginPath()
   ctx.arc(size / 2, size / 2, size / 2 - 3, 0, Math.PI * 2)
-  ctx.fillStyle = CORAL
+  ctx.fillStyle = fill
   ctx.fill()
   ctx.lineWidth = 2.5
   ctx.strokeStyle = "#ffffff"
@@ -105,24 +106,32 @@ export function TripStory({ tripId }: { tripId: string }) {
   const mapRef = React.useRef<any>(null)
   const mlRef = React.useRef<any>(null)
   const mutedRef = React.useRef(false)
+  const audioRef = React.useRef<HTMLAudioElement | null>(null)
+  const premiumUnavailableRef = React.useRef(false)
 
   const [mapReady, setMapReady] = React.useState(false)
   const [started, setStarted] = React.useState(false)
   const [playing, setPlaying] = React.useState(false)
   const [muted, setMuted] = React.useState(false)
   const [step, setStep] = React.useState(0) // 0 = intro, 1..N = scene, N+1 = outro
-  const [imgIndex, setImgIndex] = React.useState(0)
+  // Photo carousel position, remembered together with the step it belongs to
+  // so it resets to the first photo on every new stop (no setState-in-effect).
+  const [carousel, setCarousel] = React.useState({ step: 0, i: 0 })
 
   const N = story?.scenes.length ?? 0
+  const imgIndex = carousel.step === step ? carousel.i : 0
 
   // Auto-cycle the current stop's photos.
   React.useEffect(() => {
-    setImgIndex(0)
     const imgs =
       story && step >= 1 && step <= N ? story.scenes[step - 1].images : []
     if (imgs.length <= 1) return
     const t = setInterval(
-      () => setImgIndex((i) => (i + 1) % imgs.length),
+      () =>
+        setCarousel((c) => ({
+          step,
+          i: ((c.step === step ? c.i : 0) + 1) % imgs.length,
+        })),
       1800
     )
     return () => clearInterval(t)
@@ -186,7 +195,7 @@ export function TripStory({ tripId }: { tripId: string }) {
           type: "line",
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": CORAL, "line-width": 4, "line-opacity": 0.85 },
+          paint: { "line-color": cssVarToHex("--chart-3"), "line-width": 4, "line-opacity": 0.9 },
         })
 
         // Icon marker images (Lucide → canvas → usable on the GL map).
@@ -217,7 +226,7 @@ export function TripStory({ tripId }: { tripId: string }) {
           id: "stops-halo",
           type: "circle",
           source: "stops",
-          paint: { "circle-radius": 22, "circle-color": CORAL, "circle-opacity": 0.3 },
+          paint: { "circle-radius": 22, "circle-color": cssVarToHex("--primary"), "circle-opacity": 0.35 },
           filter: ["==", ["get", "n"], -1],
         })
         map.addLayer({
@@ -325,25 +334,33 @@ export function TripStory({ tripId }: { tripId: string }) {
       }
     }
 
-    const synth = typeof window !== "undefined" ? window.speechSynthesis : null
-    if (synth && !mutedRef.current) {
-      try {
-        synth.cancel()
-        const u = new SpeechSynthesisUtterance(text)
-        u.rate = 1.0
-        u.onend = finish
-        u.onerror = finish
-        synth.speak(u)
-      } catch {
-        /* fall back to timer */
-      }
+    const speakWithDevice = () => {
+      const synth = typeof window !== "undefined" ? window.speechSynthesis : null
+      if (!synth || mutedRef.current) return
+      try { synth.cancel(); const u = new SpeechSynthesisUtterance(text); u.rate = 1.0; u.onend = finish; u.onerror = finish; synth.speak(u) } catch { /* timer remains */ }
+    }
+    if (!mutedRef.current) {
+      if (premiumUnavailableRef.current) speakWithDevice()
+      else fetch("/api/voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, tripId }) })
+        .then(async (response) => {
+          if (!response.ok) { premiumUnavailableRef.current = true; speakWithDevice(); return }
+          const blob = await response.blob()
+          const url = URL.createObjectURL(blob)
+          const audio = new Audio(url)
+          audioRef.current = audio
+          audio.onended = () => { URL.revokeObjectURL(url); finish() }
+          audio.onerror = () => { URL.revokeObjectURL(url); speakWithDevice() }
+          audio.play().catch(speakWithDevice)
+        }).catch(speakWithDevice)
     }
     const safety = setTimeout(finish, estimateMs(text) + (step === 0 ? 600 : 0))
     return () => {
       clearTimeout(safety)
       window.speechSynthesis?.cancel()
+      audioRef.current?.pause()
+      audioRef.current = null
     }
-  }, [step, playing, started, story, mapReady, N])
+  }, [step, playing, started, story, mapReady, N, tripId])
 
   function start() {
     setStarted(true)
@@ -368,7 +385,7 @@ export function TripStory({ tripId }: { tripId: string }) {
   if (!story) {
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-16 text-center">
-        <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
+        <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-brand">
           <Clapperboard className="size-7" />
         </div>
         <h3 className="text-lg font-semibold">Your trip, as a story</h3>
@@ -464,7 +481,7 @@ export function TripStory({ tripId }: { tripId: string }) {
             {currentScene ? (
               <>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="font-medium text-primary">
+                  <span className="font-medium text-brand">
                     Stop {currentScene.n} of {N}
                   </span>
                   <span>·</span>
@@ -474,7 +491,7 @@ export function TripStory({ tripId }: { tripId: string }) {
                   </span>
                 </div>
                 <h3 className="mt-1.5 flex items-center gap-2 text-lg font-semibold tracking-tight">
-                  <span className="grid size-6 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-md bg-primary/10 text-brand">
                     <ActivityIcon
                       iconKey={currentScene.iconKey}
                       className="size-4"
@@ -508,7 +525,7 @@ export function TripStory({ tripId }: { tripId: string }) {
                       href={mapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                      className="inline-flex items-center gap-1.5 text-brand hover:underline"
                     >
                       <MapPin className="size-3.5" />
                       Open in Google Maps
@@ -519,7 +536,7 @@ export function TripStory({ tripId }: { tripId: string }) {
                         href={currentScene.sourceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                        className="inline-flex items-center gap-1.5 text-brand hover:underline"
                       >
                         <Link2 className="size-3.5" />
                         View source

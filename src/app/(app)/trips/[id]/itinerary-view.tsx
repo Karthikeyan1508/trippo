@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { activityIconKey, activityLabel, categoryColor } from "@/lib/trip-icons"
 import { ActivityIcon } from "@/components/activity-icon"
+import { safeHttpUrl } from "@/lib/safe-url"
+import { AddStopButton, StopMenu } from "./stop-editor"
 
 type Item = {
   id: string
@@ -36,9 +38,12 @@ export type ItineraryData = {
 export function ItineraryView({
   itinerary,
   stopNumbers,
+  editable = false,
 }: {
   itinerary: ItineraryData
   stopNumbers?: Record<string, number>
+  /** Admin-only: show add / edit / reorder / remove controls. */
+  editable?: boolean
 }) {
   return (
     <div className="space-y-5">
@@ -57,8 +62,8 @@ export function ItineraryView({
       {itinerary.days.map((day) => (
         <div key={day.id} className="rounded-2xl border bg-card">
           {/* Day header — sticky while its stops scroll */}
-          <div className="sticky top-[4.5rem] z-20 flex items-center gap-3 rounded-t-2xl border-b bg-muted px-5 py-3 shadow-sm">
-            <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+          <div className="sticky top-14 z-20 flex items-center gap-3 rounded-t-2xl border-b bg-muted px-5 py-3 shadow-sm">
+            <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-brand">
               Day {day.dayNumber}
             </span>
             <div className="min-w-0">
@@ -111,6 +116,22 @@ export function ItineraryView({
 
                   {/* Content */}
                   <div className="min-w-0 flex-1">
+                    {editable && (
+                      <div className="float-right -mt-1 -mr-1 ml-2">
+                        <StopMenu
+                          itemId={item.id}
+                          title={item.title}
+                          isFirst={idx === 0}
+                          isLast={isLast}
+                          initial={{
+                            title: item.title,
+                            startTime: item.startTime ?? "",
+                            category: item.category,
+                            description: item.description ?? "",
+                          }}
+                        />
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {item.startTime && (
                         <span className="font-medium tabular-nums text-foreground">
@@ -136,12 +157,12 @@ export function ItineraryView({
                           {item.rating}
                         </span>
                       )}
-                      {item.sourceUrl && (
+                      {safeHttpUrl(item.sourceUrl) && (
                         <a
-                          href={item.sourceUrl}
+                          href={safeHttpUrl(item.sourceUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-primary"
+                          className="text-muted-foreground hover:text-brand"
                           aria-label="Open source"
                         >
                           <ExternalLink className="size-3.5" />
@@ -161,7 +182,7 @@ export function ItineraryView({
                     )}
                     {item.why && (
                       <p className="mt-1.5 flex items-start gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
-                        <Sparkles className="mt-0.5 size-3 shrink-0 text-primary" />
+                        <Sparkles className="mt-0.5 size-3 shrink-0 text-brand" />
                         <span>{item.why}</span>
                       </p>
                     )}
@@ -170,6 +191,12 @@ export function ItineraryView({
               )
             })}
           </ol>
+
+          {editable && (
+            <div className="border-t px-3 py-2">
+              <AddStopButton dayId={day.id} />
+            </div>
+          )}
         </div>
       ))}
 

@@ -77,7 +77,7 @@ export function ApprovalPanel({
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-5 py-4">
         <div className="flex items-center gap-3">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-brand">
             <Users className="size-5" />
           </div>
           <div>

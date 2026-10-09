@@ -52,9 +52,14 @@ export type ItineraryContext = {
     pace: Record<string, number>
     interests: Record<string, number>
     stayTypes: Record<string, number>
+    transports: Record<string, number>
     avgBudgetPerDay?: number | null
     mustCover: string[]
+    /** Free-text accessibility / medical needs the group must plan around. */
+    accessibility: string[]
   }
+  /** The stay the group already picked, if any — the plan should be built around it. */
+  chosenStay?: { name: string; price?: string | null } | null
   research: ResearchBundle
 }
 
@@ -72,6 +77,9 @@ Rules:
 - Order each day sensibly by time and keep travel between stops reasonable.
 - For every item, give a short "why" that ties back to the group's preferences or the place's rating.
 - Cover meals (breakfast/lunch/dinner) using the restaurant data where possible.
+- Treat group.accessibility as hard constraints: avoid stops or transfers that conflict with any listed need (e.g. long treks, stairs-only sites) and say so in the "why".
+- Favour the group's preferred transports (group.transports) for travel legs.
+- If chosenStay is provided, the group has already picked it: use it as the STAY item (placeName = its exact name) and keep each day's route sensible around it.
 - Use 24h times like "09:30". Keep descriptions concise.
 - Produce exactly the requested number of days.`
 
@@ -178,7 +186,13 @@ export async function generateItineraryWithGroq(
         content: `Plan a ${ctx.days}-day ${ctx.tripType.toLowerCase()} trip to ${ctx.destination}${
           ctx.originCity ? ` from ${ctx.originCity}` : ""
         } (${ctx.startDate} to ${ctx.endDate}).\n\nGroup & data (JSON):\n${JSON.stringify(
-          { group: ctx.group, budgetPerPerson: ctx.budgetPerPerson, currency: ctx.currency, research: ctx.research },
+          {
+            group: ctx.group,
+            chosenStay: ctx.chosenStay ?? null,
+            budgetPerPerson: ctx.budgetPerPerson,
+            currency: ctx.currency,
+            research: ctx.research,
+          },
           null,
           0
         )}`,
@@ -451,6 +465,116 @@ export async function generatePrepWithGroq(
     return normalizePrep(JSON.parse(call.function.arguments))
   } catch (err) {
     console.error("Groq prep request failed:", err)
+    return null
+  }
+}
+
+
+// ── Gear & shopping ideas ───────────────────────────────────────────────
+
+export type GearIdeaOut = { query: string; label: string; reason: string }
+
+export type GearIdeaContext = {
+  destination: string
+  tripType: string
+  startDate: string
+  endDate: string
+  days: number
+  interests: string[]
+  /** Free-text accessibility / medical needs to respect when suggesting gear. */
+  accessibility: string[]
+  /** A sample of planned activities, to ground the suggestions. */
+  activities: string[]
+}
+
+const GEAR_SYSTEM = `You are a thoughtful travel-gear advisor for a group trip.
+Return 6-8 shopping ideas via the gear_ideas function. Each idea has:
+- query: a concise Amazon search phrase (generic product type; avoid brand names).
+- label: a 2-4 word chip title.
+- reason: ONE short sentence tying it to THIS trip — the season, the destination's climate, the planned activities or the group's needs.
+Prioritise practical, packable items people forget. No duplicates. Skip obvious basics (toothbrush, clothes) unless the trip makes them special.
+Respect any accessibility notes (e.g. suggest supportive footwear for knee trouble).`
+
+const GEAR_TOOL = {
+  type: "function",
+  function: {
+    name: "gear_ideas",
+    description: "Return shopping ideas tailored to the trip.",
+    parameters: {
+      type: "object",
+      properties: {
+        ideas: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              query: { type: "string" },
+              label: { type: "string" },
+              reason: { type: "string" },
+            },
+            required: ["query", "label", "reason"],
+          },
+        },
+      },
+      required: ["ideas"],
+    },
+  },
+}
+
+export async function suggestGearWithGroq(
+  ctx: GearIdeaContext
+): Promise<GearIdeaOut[] | null> {
+  if (!hasGroq()) return null
+  const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b"
+
+  const body: Record<string, unknown> = {
+    model,
+    temperature: 0.5,
+    max_tokens: 4000,
+    ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
+    messages: [
+      { role: "system", content: GEAR_SYSTEM },
+      {
+        role: "user",
+        content: `Trip: ${ctx.days}-day ${ctx.tripType.toLowerCase()} trip to ${ctx.destination} (${ctx.startDate} to ${ctx.endDate}).
+Group interests: ${ctx.interests.join(", ") || "general sightseeing"}.
+Accessibility notes: ${ctx.accessibility.join("; ") || "none"}.
+Planned activities: ${ctx.activities.join("; ") || "not planned yet"}.`,
+      },
+    ],
+    tools: [GEAR_TOOL],
+    tool_choice: { type: "function", function: { name: "gear_ideas" } },
+  }
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      console.error("Groq gear error:", res.status, await res.text())
+      return null
+    }
+    const json = await res.json()
+    const call = json?.choices?.[0]?.message?.tool_calls?.[0]
+    if (!call?.function?.arguments) return null
+    const parsed = JSON.parse(call.function.arguments)
+    const ideas: GearIdeaOut[] = (Array.isArray(parsed?.ideas) ? parsed.ideas : [])
+      .map((i: any) => ({
+        query: String(i?.query ?? "").trim().slice(0, 80),
+        label: String(i?.label ?? "").trim().slice(0, 40),
+        reason: String(i?.reason ?? "").trim().slice(0, 200),
+      }))
+      .filter((i: GearIdeaOut) => i.query.length >= 3 && i.label && i.reason)
+      .slice(0, 8)
+    return ideas.length > 0 ? ideas : null
+  } catch (err) {
+    console.error("Groq gear request failed:", err)
     return null
   }
 }

@@ -185,7 +185,7 @@ export function AddExpenseDialog({
                   className={cn(
                     "rounded-lg border px-3 py-2 text-sm transition-colors",
                     splitType === t
-                      ? "border-primary bg-primary/10 font-medium text-primary"
+                      ? "border-primary bg-primary/10 font-medium text-brand"
                       : "text-muted-foreground hover:bg-muted"
                   )}
                 >

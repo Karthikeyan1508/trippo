@@ -5,10 +5,11 @@ import { addDays } from "date-fns"
 
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
+import { notify } from "@/server/notify"
+import { tripUrl } from "@/lib/notifications"
 import { researchTrip, type ResearchBundle, type PlaceLite } from "@/server/serpapi"
 import {
   generateItineraryWithGroq,
-  hasGroq,
   type GeneratedItinerary,
   type ItineraryContext,
 } from "@/server/groq"
@@ -62,6 +63,10 @@ export async function generateItinerary(tripId: string): Promise<ActionResult> {
   const pace = tally(prefs.map((p) => p.pace))
   const interests = tally(prefs.flatMap((p) => p.interests))
   const stayTypes = tally(prefs.flatMap((p) => p.stayTypes))
+  const transports = tally(prefs.flatMap((p) => p.transports))
+  const accessibility = prefs
+    .map((p) => p.accessibility?.trim())
+    .filter((s): s is string => !!s)
   const mustCover = prefs
     .map((p) => p.mustCoverPlaces)
     .filter((s): s is string => !!s)
@@ -82,6 +87,12 @@ export async function generateItinerary(tripId: string): Promise<ActionResult> {
 
   const vegHeavy = (diet.VEG ?? 0) > (diet.NON_VEG ?? 0)
   const dietQuery = vegHeavy ? "vegetarian" : ""
+
+  // The stay the group already picked (Stay & transport tab), if any.
+  const chosenStay = await prisma.stayOption.findFirst({
+    where: { tripId, selected: true },
+    select: { name: true, price: true },
+  })
 
   // 1) SerpApi research (cached; empty if no key).
   const research = await researchTrip({
@@ -107,9 +118,14 @@ export async function generateItinerary(tripId: string): Promise<ActionResult> {
       pace,
       interests,
       stayTypes,
+      transports,
       avgBudgetPerDay,
       mustCover,
+      accessibility,
     },
+    chosenStay: chosenStay
+      ? { name: chosenStay.name, price: chosenStay.price }
+      : null,
     research,
   }
 
@@ -167,6 +183,25 @@ export async function generateItinerary(tripId: string): Promise<ActionResult> {
         })),
       },
     },
+  })
+
+  // A new plan has no approvals yet, so a trip that was voting on / confirmed
+  // the previous plan goes back to planning until the group signs off again.
+  if (trip.status === "VOTING" || trip.status === "CONFIRMED") {
+    await prisma.trip.update({
+      where: { id: tripId },
+      data: { status: "PLANNING" },
+    })
+  }
+
+  await notify({
+    tripId,
+    actorId: user.id,
+    to: "others",
+    type: "plan_ready",
+    title: "The plan is ready — review and vote",
+    body: trip.name,
+    url: tripUrl(tripId, "itinerary"),
   })
 
   revalidatePath(`/trips/${tripId}`)

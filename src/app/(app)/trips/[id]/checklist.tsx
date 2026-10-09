@@ -33,9 +33,15 @@ export function Checklist({
   const router = useRouter()
   const [pending, startTransition] = React.useTransition()
   const [local, setLocal] = React.useState(items)
+  const [seenItems, setSeenItems] = React.useState(items)
   const [newLabel, setNewLabel] = React.useState("")
 
-  React.useEffect(() => setLocal(items), [items])
+  // Re-sync optimistic state when the server sends fresh items. Done during
+  // render (React's "adjust state on prop change" pattern), not in an effect.
+  if (items !== seenItems) {
+    setSeenItems(items)
+    setLocal(items)
+  }
 
   const done = local.filter((i) => i.isDone).length
   const pct = local.length ? Math.round((done / local.length) * 100) : 0

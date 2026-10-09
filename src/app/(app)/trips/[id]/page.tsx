@@ -1,109 +1,59 @@
-import Link from "next/link"
 import { notFound } from "next/navigation"
-import {
-  CalendarDays,
-  MapPin,
-  PlaneTakeoff,
-  Wallet,
-  Crown,
-  CheckCircle2,
-  Circle,
-  Sparkles,
-  Map as MapIcon,
-  ListChecks,
-  Download,
-  LayoutDashboard,
-  Users,
-  SlidersHorizontal,
-  BarChart3,
-  Route,
-  Clapperboard,
-  Compass,
-  type LucideIcon,
-} from "lucide-react"
+import { after } from "next/server"
+import { differenceInCalendarDays, startOfDay } from "date-fns"
+import { Clapperboard } from "lucide-react"
+import { Tabs as TabsPrimitive } from "radix-ui"
 
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
 import {
   formatDateRange,
-  tripDurationDays,
-  prettifyEnum,
   formatMoney,
+  prettifyEnum,
+  tripDurationDays,
 } from "@/lib/format"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Separator } from "@/components/ui/separator"
+import { computeBalances, settleUp } from "@/lib/budget"
+import { computeJourney, phaseLabel, tripPhase } from "@/lib/journey"
+import { activityIconKey } from "@/lib/trip-icons"
+import type { PreferenceInput, CreateTripInput } from "@/lib/validators"
 import {
   Sidebar,
-  SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarHeader,
   SidebarInset,
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
-  SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { Tabs as TabsPrimitive } from "radix-ui"
-import { NavMenuButton } from "./nav-menu-button"
+import { resolveCovers } from "@/server/cover"
+import { allowedTabs } from "./nav-config"
+import { TripTabs } from "./trip-tabs"
+import { TripNav, type NavBadges } from "./trip-nav"
 import { NavUser } from "./nav-user"
+import { TripSidebarHeader } from "./trip-sidebar-header"
+import { TripTopBar } from "./trip-top-bar"
 import { InviteDialog } from "./invite-dialog"
-import { RevokeInviteButton } from "./revoke-invite-button"
+import { TripHub, type HubMember } from "./trip-hub"
+import { ItineraryTab } from "./itinerary-tab"
+import { TravelOptions } from "./travel-options"
+import { GearTab } from "./gear-tab"
+import { toPick } from "@/lib/gear"
 import { PreferenceForm } from "./preference-form"
+import { PollsPanel, type PollData } from "./polls-panel"
+import { CrewTab } from "./crew-tab"
 import { GroupInsights } from "./group-insights"
-import { ItineraryView } from "./itinerary-view"
-import { ItineraryMap, type MapStop } from "./itinerary-map"
-import { TripStory } from "./trip-story"
-import { GenerateItineraryButton } from "./generate-itinerary-button"
-import { ApprovalPanel } from "./approval-panel"
-import { PrepView } from "./prep-view"
-import { Checklist } from "./checklist"
-import { GeneratePrepButton } from "./generate-prep-button"
+import { SettingsTab } from "./settings-tab"
+import { PrepTab } from "./prep-tab"
 import { LiveMap } from "./live-map"
-import { AddExpenseDialog } from "./add-expense-dialog"
-import { SettleButton, DeleteExpenseButton } from "./budget-buttons"
-import { computeBalances, settleUp } from "@/lib/budget"
-import { expenseIcon } from "./expense-icons"
-import { activityIconKey } from "@/lib/trip-icons"
-import type { PreferenceInput } from "@/lib/validators"
+import { TripModeControls } from "@/components/trip-mode-controls"
+import { BudgetTab } from "./budget-tab"
+import { TripStory } from "./trip-story"
+import type { MapStop } from "./itinerary-map"
 
-function memberInitials(name?: string | null, email?: string | null) {
-  const s = name || email || "?"
-  return s
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase()
-}
+type ApprovalStatus = "APPROVED" | "REJECTED" | "PENDING"
 
-const ROADMAP = [
-  {
-    icon: Sparkles,
-    title: "AI itinerary",
-    desc: "Real flights, stays & places → a day-by-day plan.",
-  },
-  {
-    icon: ListChecks,
-    title: "Checklists & etiquette",
-    desc: "Docs, packing and destination know-how.",
-  },
-  {
-    icon: MapIcon,
-    title: "Live map & budget",
-    desc: "See everyone on the trip and split expenses.",
-  },
-]
+const displayName = (u: { name: string | null; email: string | null }) =>
+  u.name ?? u.email?.split("@")[0] ?? "Member"
 
-export default async function TripPage({
-  params,
-}: PageProps<"/trips/[id]">) {
+export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
   const { id } = await params
   const user = await requireUser()
 
@@ -114,143 +64,107 @@ export default async function TripPage({
         include: { user: true, preference: true },
         orderBy: { joinedAt: "asc" },
       },
-      invites: {
-        where: { status: "PENDING" },
-        orderBy: { createdAt: "desc" },
-      },
+      invites: { where: { status: "PENDING" }, orderBy: { createdAt: "desc" } },
       prep: true,
+      stayOptions: { orderBy: { createdAt: "asc" } },
     },
   })
-
   if (!trip) notFound()
 
   const myMember = trip.members.find((m) => m.userId === user.id)
   if (!myMember) notFound()
 
-  const itinerary = await prisma.itinerary.findFirst({
-    where: { tripId: id },
-    orderBy: { generatedAt: "desc" },
-    include: {
-      days: {
-        orderBy: { dayNumber: "asc" },
-        include: { items: { orderBy: { order: "asc" } } },
-      },
-      approvals: true,
-    },
-  })
-
   const isAdmin = myMember.role === "ADMIN"
+  const isVoter = myMember.role !== "OBSERVER"
 
-  type ApprovalStatus = "APPROVED" | "REJECTED" | "PENDING"
-  const approvers = trip.members
-    .filter((m) => m.role !== "OBSERVER")
-    .map((m) => {
-      const a = itinerary?.approvals.find((x) => x.userId === m.userId)
-      return {
-        userId: m.userId,
-        name: m.user.name,
-        image: m.user.image,
-        email: m.user.email,
-        status: (a?.status ?? "PENDING") as ApprovalStatus,
-        reason: a?.reason ?? null,
-      }
-    })
-  const myStatus = (itinerary?.approvals.find((a) => a.userId === user.id)
-    ?.status ?? "PENDING") as ApprovalStatus
-  const planLocked = itinerary?.status === "FINAL"
-  const canApprove = myMember.role !== "OBSERVER"
-
-  // Seed this member's checklist from the prep guide on first view.
-  if (trip.prep) {
-    const existing = await prisma.checklistItem.count({
-      where: { tripId: id, userId: user.id },
-    })
-    if (existing === 0) {
-      const docs = ((trip.prep.documents as unknown as string[]) ?? []).map(
-        (label, i) => ({
-          tripId: id,
-          userId: user.id,
-          label,
-          category: "DOCUMENT" as const,
-          order: i,
-        })
-      )
-      const packingCats =
-        (trip.prep.packing as unknown as {
-          category: string
-          items: string[]
-        }[]) ?? []
-      const packing = packingCats.flatMap((c, ci) =>
-        c.items.map((label, ii) => ({
-          tripId: id,
-          userId: user.id,
-          label,
-          category: "PACKING" as const,
-          order: 100 + ci * 20 + ii,
-        }))
-      )
-      const seed = [...docs, ...packing]
-      if (seed.length > 0) {
-        await prisma.checklistItem.createMany({ data: seed })
-      }
-    }
+  // First visit to a trip with no photo yet: find one after the page is sent.
+  if (trip.coverImage === null) {
+    after(() => resolveCovers([trip], 20_000))
   }
-  const checklist = await prisma.checklistItem.findMany({
-    where: { tripId: id, userId: user.id },
-    orderBy: { order: "asc" },
-  })
 
-  // Located itinerary stops → numbered pins for the itinerary map,
-  // and the starting center for the live map.
-  const stops: MapStop[] = []
-  const stopNumbers: Record<string, number> = {}
-  if (itinerary) {
-    let n = 0
-    for (const d of itinerary.days) {
-      for (const it of d.items) {
-        if (it.lat != null && it.lng != null) {
-          n++
-          stops.push({
-            n,
-            lat: it.lat,
-            lng: it.lng,
-            title: it.title,
-            iconKey: activityIconKey(it.category, it.title, it.description),
-          })
-          stopNumbers[it.id] = n
-        }
-      }
-    }
-  }
-  const mapCenter =
-    stops.length > 0 ? { lat: stops[0].lat, lng: stops[0].lng } : null
-
-  // Budget: expenses, settlements, balances and settle-up plan.
-  const [expenses, settlements] = await Promise.all([
+  // Everything below is independent of each other, so load it together.
+  const [itinerary, expenses, settlements, polls, checklist, products, unreadCount] = await Promise.all([
+    prisma.itinerary.findFirst({
+      where: { tripId: id },
+      orderBy: { generatedAt: "desc" },
+      include: {
+        days: {
+          orderBy: { dayNumber: "asc" },
+          include: { items: { orderBy: { order: "asc" } } },
+        },
+        approvals: true,
+      },
+    }),
     prisma.expense.findMany({
       where: { tripId: id },
       include: { shares: true },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.settlement.findMany({
+    prisma.settlement.findMany({ where: { tripId: id } }),
+    prisma.poll.findMany({
       where: { tripId: id },
+      include: { votes: { select: { userId: true, option: true } } },
       orderBy: { createdAt: "desc" },
     }),
+    loadChecklist(id, user.id, trip.prep),
+    prisma.productSuggestion.findMany({
+      where: { tripId: id },
+      include: {
+        suggestedBy: { select: { id: true, name: true, email: true, image: true } },
+        votes: { select: { userId: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.notification.count({ where: { userId: user.id, readAt: null } }),
   ])
-  const memberIds = trip.members.map((m) => m.userId)
-  const nameById = new Map(
-    trip.members.map((m) => [m.userId, m.user.name ?? m.user.email ?? "Member"])
-  )
-  const membersForExpense = trip.members.map((m) => ({
-    userId: m.userId,
-    name: m.user.name ?? m.user.email ?? "Member",
-  }))
+
+  // ── Approval state ────────────────────────────────────────────────
+  const approvalOf = (userId: string): ApprovalStatus =>
+    (itinerary?.approvals.find((a) => a.userId === userId)?.status ??
+      "PENDING") as ApprovalStatus
+  const planLocked = itinerary?.status === "FINAL"
+  const myStatus = approvalOf(user.id)
+
+  const approvers = trip.members
+    .filter((m) => m.role !== "OBSERVER")
+    .map((m) => ({
+      userId: m.userId,
+      name: m.user.name,
+      image: m.user.image,
+      email: m.user.email,
+      status: approvalOf(m.userId),
+      reason: itinerary?.approvals.find((a) => a.userId === m.userId)?.reason ?? null,
+    }))
+
+  // ── Located stops → numbered map pins ─────────────────────────────
+  const stops: MapStop[] = []
+  const stopNumbers: Record<string, number> = {}
+  for (const day of itinerary?.days ?? []) {
+    for (const it of day.items) {
+      if (it.lat != null && it.lng != null) {
+        const n = stops.length + 1
+        stops.push({
+          n,
+          lat: it.lat,
+          lng: it.lng,
+          title: it.title,
+          iconKey: activityIconKey(it.category, it.title, it.description),
+        })
+        stopNumbers[it.id] = n
+      }
+    }
+  }
+  const mapCenter = stops.length > 0 ? { lat: stops[0].lat, lng: stops[0].lng } : null
+
+  // ── Budget (observers follow the trip but don't share its costs) ──
+  const participants = trip.members
+    .filter((m) => m.role !== "OBSERVER")
+    .map((m) => ({ userId: m.userId, name: displayName(m.user) }))
+  const names = Object.fromEntries(trip.members.map((m) => [m.userId, displayName(m.user)]))
   const balances = computeBalances(
-    memberIds,
+    participants.map((p) => p.userId),
     expenses.map((e) => ({ amount: e.amount, paidById: e.paidById })),
-    expenses.flatMap((e) =>
-      e.shares.map((s) => ({ userId: s.userId, amount: s.amount }))
-    ),
+    expenses.flatMap((e) => e.shares.map((s) => ({ userId: s.userId, amount: s.amount }))),
     settlements.map((s) => ({
       fromUserId: s.fromUserId,
       toUserId: s.toUserId,
@@ -258,12 +172,65 @@ export default async function TripPage({
     }))
   )
   const transfers = settleUp(balances)
-  const totalSpent = expenses.reduce((a, e) => a + e.amount, 0)
-  const myBalance = balances[user.id] ?? 0
 
+  // ── Journey / hub ─────────────────────────────────────────────────
+  const crew: HubMember[] = trip.members.map((m) => ({
+    id: m.id,
+    userId: m.userId,
+    name: displayName(m.user),
+    image: m.user.image,
+    role: m.role,
+    hasPreference: !!m.preference,
+    approval: approvalOf(m.userId),
+    isMe: m.userId === user.id,
+  }))
+
+  const checklistDone = checklist.filter((c) => c.isDone).length
+  const { steps, next } = computeJourney({
+    viewerId: user.id,
+    viewerRole: myMember.role,
+    members: crew,
+    pendingInvites: trip.invites.length,
+    hasPlan: !!itinerary,
+    planLocked,
+    hasPrep: !!trip.prep,
+    checklist: { done: checklistDone, total: checklist.length },
+  })
+
+  const phase = tripPhase(trip.startDate, trip.endDate)
   const days = tripDurationDays(trip.startDate, trip.endDate)
-  const p = myMember.preference
 
+  const today = (() => {
+    if (phase.phase !== "ongoing" || !itinerary || phase.dayNumber == null) return null
+    const todayStart = startOfDay(new Date())
+    const day =
+      itinerary.days.find((d) => d.date && differenceInCalendarDays(d.date, todayStart) === 0) ??
+      itinerary.days.find((d) => d.dayNumber === phase.dayNumber)
+    if (!day) return null
+    return {
+      dayNumber: day.dayNumber,
+      items: day.items.map((it) => ({
+        id: it.id,
+        time: it.startTime,
+        title: it.title,
+        place: it.placeName,
+      })),
+    }
+  })()
+
+  // ── Sidebar attention markers ─────────────────────────────────────
+  const openPollsToVote = polls.filter(
+    (p) => !(p.closesAt && p.closesAt <= new Date()) && !p.votes.some((v) => v.userId === user.id)
+  ).length
+  const badges: NavBadges = {}
+  if (isVoter && !myMember.preference) badges.preferences = "dot"
+  if (itinerary && !planLocked && isVoter && myStatus === "PENDING") badges.itinerary = "dot"
+  if (isVoter && openPollsToVote > 0) badges.decisions = openPollsToVote
+  // Crew picks this person hasn't weighed in on (and didn't suggest themselves).
+  if (products.some((p) => !p.votes.some((v) => v.userId === user.id))) badges.gear = "dot"
+
+  // ── Props for forms / sub-views ───────────────────────────────────
+  const p = myMember.preference
   const prefDefaults: PreferenceInput = {
     age: p?.age != null ? String(p.age) : "",
     gender: p?.gender ?? "",
@@ -276,626 +243,345 @@ export default async function TripPage({
     accessibility: p?.accessibility ?? "",
     mustCoverPlaces: p?.mustCoverPlaces ?? "",
   }
+  const tripDefaults: CreateTripInput = {
+    name: trip.name,
+    destination: trip.destination,
+    originCity: trip.originCity ?? "",
+    startDate: trip.startDate.toISOString().slice(0, 10),
+    endDate: trip.endDate.toISOString().slice(0, 10),
+    tripType: trip.tripType,
+    budgetPerPerson: trip.budgetPerPerson != null ? String(trip.budgetPerPerson) : "",
+    currency: trip.currency as CreateTripInput["currency"],
+  }
 
-  const filledCount = trip.members.filter((m) => m.preference).length
+  const voters = crew.filter((m) => m.role !== "OBSERVER")
+  const readiness = {
+    filled: voters.filter((m) => m.hasPreference).length,
+    total: voters.length,
+    missing: voters.filter((m) => !m.hasPreference).map((m) => m.name.split(" ")[0]),
+  }
 
-  const navItems: {
-    value: string
-    label: string
-    icon: LucideIcon
-    badge?: number
-  }[] = [
-    { value: "overview", label: "Overview", icon: LayoutDashboard },
-    { value: "itinerary", label: "Itinerary", icon: Route },
-    { value: "story", label: "Story", icon: Clapperboard },
-    { value: "prep", label: "Prep", icon: ListChecks },
-    { value: "live", label: "Live map", icon: MapIcon },
-    { value: "budget", label: "Budget", icon: Wallet },
-    {
-      value: "members",
-      label: "Members",
-      icon: Users,
-      badge: trip.members.length,
-    },
-    { value: "preferences", label: "My preferences", icon: SlidersHorizontal },
-    ...(isAdmin
-      ? [{ value: "insights", label: "Group insights", icon: BarChart3 }]
+  const pollData: PollData[] = polls.map((poll) => ({
+    id: poll.id,
+    question: poll.question,
+    options: poll.options as unknown as string[],
+    votes: poll.votes,
+    closed: !!poll.closesAt && poll.closesAt <= new Date(),
+    createdById: poll.createdById,
+  }))
+
+  const invite = {
+    tripId: trip.id,
+    tripName: trip.name,
+    joinCode: trip.joinCode,
+    isAdmin,
+  }
+
+  const facts = [
+    { label: "Where", value: trip.destination },
+    ...(trip.originCity ? [{ label: "From", value: trip.originCity }] : []),
+    { label: "When", value: formatDateRange(trip.startDate, trip.endDate) },
+    { label: "Length", value: `${days} ${days === 1 ? "day" : "days"}` },
+    ...(trip.budgetPerPerson != null
+      ? [{ label: "Budget", value: `${formatMoney(trip.budgetPerPerson, trip.currency)} / person` }]
       : []),
+    { label: "Type", value: prettifyEnum(trip.tripType) },
   ]
 
   return (
-    <TabsPrimitive.Root
-      defaultValue="overview"
-      orientation="vertical"
-      className="contents"
-    >
+    <TripTabs defaultTab="overview" allowed={allowedTabs(isAdmin)}>
       <SidebarProvider>
         <Sidebar collapsible="icon">
-          <SidebarHeader>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton size="lg" asChild>
-                  <Link href="/dashboard">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                      <Compass className="size-4" />
-                    </div>
-                    <div className="grid flex-1 text-left text-sm leading-tight">
-                      <span className="truncate font-semibold">Trippo</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        All trips
-                      </span>
-                    </div>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarHeader>
+          <TripSidebarHeader
+            name={trip.name}
+            destination={trip.destination}
+            coverImage={trip.coverImage || null}
+            stagesDone={steps.filter((st) => st.state === "done").length}
+            stagesTotal={steps.length}
+          />
 
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>Plan</SidebarGroupLabel>
-              <TabsPrimitive.List asChild>
-                <SidebarMenu className="gap-1.5">
-                  {navItems.map((item) => (
-                    <SidebarMenuItem key={item.value}>
-                      <TabsPrimitive.Trigger value={item.value} asChild>
-                        <NavMenuButton
-                          title={item.label}
-                          className="h-9 data-[state=active]:bg-sidebar-accent data-[state=active]:font-medium data-[state=active]:text-sidebar-accent-foreground"
-                        >
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </NavMenuButton>
-                      </TabsPrimitive.Trigger>
-                      {item.badge != null && (
-                        <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>
-                      )}
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </TabsPrimitive.List>
-            </SidebarGroup>
-          </SidebarContent>
+          <TripNav isAdmin={isAdmin} badges={badges} />
 
           <SidebarFooter>
-            <NavUser
-              user={{ name: user.name, email: user.email, image: user.image }}
-            />
+            <NavUser user={{ name: user.name, email: user.email, image: user.image }} />
           </SidebarFooter>
           <SidebarRail />
         </Sidebar>
 
         <SidebarInset className="min-w-0">
-          {/* Sticky trip header */}
-          <header className="sticky top-0 z-30 flex h-[4.5rem] shrink-0 flex-col justify-center gap-1 border-b bg-background/95 px-4 backdrop-blur lg:px-6">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="-ml-1" />
-              <Separator orientation="vertical" className="mr-0.5 !h-5" />
-              <h1 className="truncate text-base font-semibold tracking-tight sm:text-lg">
-                {trip.name}
-              </h1>
-              <Badge
-                variant="secondary"
-                className="hidden shrink-0 sm:inline-flex"
-              >
-                {prettifyEnum(trip.status)}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="hidden shrink-0 md:inline-flex"
-              >
-                {prettifyEnum(trip.tripType)}
-              </Badge>
-              {isAdmin && (
-                <div className="ml-auto shrink-0">
-                  <InviteDialog tripId={trip.id} />
-                </div>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 pl-8 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <MapPin className="size-3.5" />
-                {trip.destination}
-              </span>
-              {trip.originCity && (
-                <span className="hidden items-center gap-1.5 sm:flex">
-                  <PlaneTakeoff className="size-3.5" />
-                  from {trip.originCity}
-                </span>
-              )}
-              <span className="flex items-center gap-1.5">
-                <CalendarDays className="size-3.5" />
-                {formatDateRange(trip.startDate, trip.endDate)} · {days} days
-              </span>
-              {trip.budgetPerPerson != null && (
-                <span className="hidden items-center gap-1.5 sm:flex">
-                  <Wallet className="size-3.5" />
-                  {formatMoney(trip.budgetPerPerson, trip.currency)}/person
-                </span>
-              )}
-            </div>
-          </header>
+          <TripTopBar
+            tripName={trip.name}
+            isAdmin={isAdmin}
+            unreadCount={unreadCount}
+            actions={isVoter ? <InviteDialog {...invite} /> : null}
+          />
 
           <div className="min-w-0 flex-1 px-4 pb-10 lg:px-6">
-            {/* content */}
+            <TabsPrimitive.Content value="overview">
+              <TripHub
+                steps={steps}
+                next={next}
+                phase={phase.phase}
+                phaseChip={phaseLabel(trip.startDate, trip.endDate)}
+                members={crew}
+                hasPlan={!!itinerary}
+                invite={invite}
+                today={today}
+                facts={facts}
+              />
+            </TabsPrimitive.Content>
 
-        {/* Overview */}
-        <TabsPrimitive.Content value="overview" className="mt-5 space-y-6">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border bg-card p-5">
-              <p className="text-sm text-muted-foreground">Members</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {trip.members.length}
-              </p>
-            </div>
-            <div className="rounded-xl border bg-card p-5">
-              <p className="text-sm text-muted-foreground">Duration</p>
-              <p className="mt-1 text-2xl font-semibold">{days} days</p>
-            </div>
-            <div className="rounded-xl border bg-card p-5">
-              <p className="text-sm text-muted-foreground">
-                Preferences filled
-              </p>
-              <p className="mt-1 text-2xl font-semibold">
-                {filledCount}
-                <span className="text-base font-normal text-muted-foreground">
-                  /{trip.members.length}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card p-5">
-            <h3 className="font-medium">Coming up in the plan</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Once everyone&apos;s preferences are in, these unlock next.
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {ROADMAP.map((r) => (
-                <div
-                  key={r.title}
-                  className="rounded-lg border border-dashed p-4"
-                >
-                  <r.icon className="mb-2 size-5 text-primary" />
-                  <p className="text-sm font-medium">{r.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {r.desc}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </TabsPrimitive.Content>
-
-        {/* Itinerary */}
-        <TabsPrimitive.Content value="itinerary" className="mt-5 space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="font-medium">Trip itinerary</h3>
-              <p className="text-sm text-muted-foreground">
-                {itinerary
-                  ? "Your group's day-by-day plan."
-                  : "A day-by-day plan built from the group's preferences and live place data."}
-              </p>
-            </div>
-            {isAdmin && (
-              <GenerateItineraryButton
+            <TabsPrimitive.Content value="itinerary">
+              <ItineraryTab
                 tripId={trip.id}
-                hasExisting={!!itinerary}
+                itinerary={itinerary}
+                itineraryId={itinerary?.id ?? null}
+                stops={stops}
+                stopNumbers={stopNumbers}
+                isAdmin={isAdmin}
+                approval={{
+                  locked: planLocked,
+                  canApprove: isVoter,
+                  myStatus,
+                  approvers,
+                }}
+                readiness={readiness}
+                viewerHasPreference={!!myMember.preference}
+                viewerIsVoter={isVoter}
               />
-            )}
-          </div>
+            </TabsPrimitive.Content>
 
-          {itinerary ? (
-            <>
-              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_600px] lg:items-start">
-                <div className="min-w-0 space-y-5">
-                  <ItineraryView
-                    itinerary={itinerary}
-                    stopNumbers={stopNumbers}
-                  />
-                </div>
-                <div className="lg:sticky lg:top-20">
-                  <ItineraryMap stops={stops} />
-                </div>
-              </div>
-              <ApprovalPanel
-                itineraryId={itinerary.id}
-                locked={planLocked}
-                canApprove={canApprove}
-                myStatus={myStatus}
-                approvers={approvers}
+            <TabsPrimitive.Content value="stay">
+              <TravelOptions
+                tripId={trip.id}
+                origin={trip.originCity ?? ""}
+                destination={trip.destination}
+                stays={trip.stayOptions}
+                isAdmin={isAdmin}
+                canVote={isVoter}
               />
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-16 text-center">
-              <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-                <Sparkles className="size-7" />
+            </TabsPrimitive.Content>
+
+            <TabsPrimitive.Content value="gear">
+              <GearTab
+                tripId={trip.id}
+                tripName={trip.name}
+                currency={trip.currency}
+                viewerId={user.id}
+                isAdmin={isAdmin}
+                members={trip.members.map((m) => ({
+                  id: m.userId,
+                  name: displayName(m.user),
+                  image: m.user.image,
+                }))}
+                initialPicks={products.map(toPick)}
+              />
+            </TabsPrimitive.Content>
+
+            <TabsPrimitive.Content value="preferences" className="max-w-3xl space-y-4 pt-5">
+              <div>
+                <h3 className="font-medium">My preferences</h3>
+                <p className="text-sm text-muted-foreground">
+                  These shape the plan for everyone — the more the group shares, the better
+                  the itinerary. Only you can edit yours.
+                </p>
               </div>
-              <h3 className="text-lg font-semibold">No plan yet</h3>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                {isAdmin
-                  ? "Generate a day-by-day itinerary from everyone's preferences."
-                  : "The trip admin hasn't generated the plan yet."}
-              </p>
-              {isAdmin && (
-                <div className="mt-6">
-                  <GenerateItineraryButton tripId={trip.id} />
-                </div>
-              )}
-            </div>
-          )}
-        </TabsPrimitive.Content>
-
-        {/* Story */}
-        <TabsPrimitive.Content value="story" className="mt-5 space-y-5">
-          <div>
-            <h3 className="font-medium">Visual story</h3>
-            <p className="text-sm text-muted-foreground">
-              A cinematic fly-through of your trip — 3D map, photos of each
-              place, and an AI voice-over.
-            </p>
-          </div>
-          {itinerary ? (
-            <TripStory tripId={trip.id} />
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-16 text-center">
-              <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-                <Clapperboard className="size-7" />
+              <div className="rounded-xl border bg-card p-6">
+                <PreferenceForm
+                  tripId={trip.id}
+                  defaultValues={prefDefaults}
+                  firstTime={!myMember.preference}
+                />
               </div>
-              <h3 className="text-lg font-semibold">No story yet</h3>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                Generate an itinerary first — the visual story is built from your
-                located stops.
-              </p>
-            </div>
-          )}
-        </TabsPrimitive.Content>
+            </TabsPrimitive.Content>
 
-        {/* Prep */}
-        <TabsPrimitive.Content value="prep" className="mt-5 space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="font-medium">Trip prep</h3>
-              <p className="text-sm text-muted-foreground">
-                Etiquette, documents, packing — and your personal checklist.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(trip.prep || itinerary) && (
-                <Button asChild variant="outline" className="gap-2">
-                  <a
-                    href={`/print/trips/${trip.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Download className="size-4" />
-                    Download PDF
-                  </a>
-                </Button>
-              )}
-              {isAdmin && (
-                <GeneratePrepButton tripId={trip.id} hasExisting={!!trip.prep} />
-              )}
-            </div>
-          </div>
-
-          {trip.prep ? (
-            <>
-              <PrepView
-                prep={{
-                  summary: trip.prep.summary,
-                  source: trip.prep.source,
-                  etiquette: (trip.prep.etiquette as unknown as string[]) ?? [],
-                  phrases:
-                    (trip.prep.phrases as unknown as {
-                      phrase: string
-                      meaning: string
-                    }[]) ?? [],
+            <TabsPrimitive.Content value="decisions">
+              <PollsPanel
+                tripId={trip.id}
+                polls={pollData}
+                viewerId={user.id}
+                viewerIsAdmin={isAdmin}
+                canVote={isVoter}
+                voterCount={voters.length}
+                approval={{
+                  hasPlan: !!itinerary,
+                  locked: planLocked,
+                  approved: approvers.filter((a) => a.status === "APPROVED").length,
+                  total: approvers.length,
+                  myStatus,
                 }}
               />
-              <Checklist
+            </TabsPrimitive.Content>
+
+            <TabsPrimitive.Content value="members">
+              <CrewTab
                 tripId={trip.id}
-                items={checklist.map((c) => ({
+                tripName={trip.name}
+                joinCode={trip.joinCode}
+                viewerId={user.id}
+                viewerIsAdmin={isAdmin}
+                members={trip.members.map((m) => ({
+                  id: m.id,
+                  userId: m.userId,
+                  name: displayName(m.user),
+                  email: m.user.email,
+                  image: m.user.image,
+                  role: m.role,
+                  hasPreference: !!m.preference,
+                }))}
+                invites={trip.invites.map((i) => ({ id: i.id, email: i.email, role: i.role }))}
+              />
+            </TabsPrimitive.Content>
+
+            {isAdmin && (
+              <TabsPrimitive.Content value="insights" className="pt-5">
+                <GroupInsights
+                  members={trip.members.map((m) => ({
+                    preference: m.preference
+                      ? {
+                          diet: m.preference.diet,
+                          pace: m.preference.pace,
+                          stayTypes: m.preference.stayTypes,
+                          transports: m.preference.transports,
+                          interests: m.preference.interests,
+                          budgetPerDay: m.preference.budgetPerDay,
+                        }
+                      : null,
+                  }))}
+                />
+              </TabsPrimitive.Content>
+            )}
+
+            {isAdmin && (
+              <TabsPrimitive.Content value="settings">
+                <SettingsTab
+                  tripId={trip.id}
+                  tripName={trip.name}
+                  defaultValues={tripDefaults}
+                  hasPlan={!!itinerary}
+                />
+              </TabsPrimitive.Content>
+            )}
+
+            <TabsPrimitive.Content value="prep">
+              <PrepTab
+                tripId={trip.id}
+                prep={trip.prep}
+                checklist={checklist.map((c) => ({
                   id: c.id,
                   label: c.label,
                   category: c.category,
                   isDone: c.isDone,
                 }))}
+                isAdmin={isAdmin}
+                canDownload={!!trip.prep || !!itinerary}
               />
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-16 text-center">
-              <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-                <ListChecks className="size-7" />
+            </TabsPrimitive.Content>
+
+            <TabsPrimitive.Content value="live" className="space-y-5 pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-medium">Live map</h3>
+                  <p className="text-sm text-muted-foreground">
+                    See the crew, drop meeting points and get a heads-up near saved spots.
+                    Sharing is opt-in and stops on its own after 30 minutes of silence.
+                  </p>
+                </div>
+                <TripModeControls />
               </div>
-              <h3 className="text-lg font-semibold">No prep guide yet</h3>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                {isAdmin
-                  ? "Generate destination etiquette, a documents list and a packing checklist."
-                  : "The trip admin hasn't generated the prep guide yet."}
-              </p>
-              {isAdmin && (
-                <div className="mt-6">
-                  <GeneratePrepButton tripId={trip.id} />
+              <LiveMap tripId={trip.id} initialCenter={mapCenter} canEdit={isVoter} />
+            </TabsPrimitive.Content>
+
+            <TabsPrimitive.Content value="budget">
+              <BudgetTab
+                tripId={trip.id}
+                currency={trip.currency}
+                budgetPerPerson={trip.budgetPerPerson}
+                viewerId={user.id}
+                viewerIsAdmin={isAdmin}
+                viewerIsObserver={!isVoter}
+                participants={participants}
+                names={names}
+                expenses={expenses.map((e) => ({
+                  id: e.id,
+                  description: e.description,
+                  amount: e.amount,
+                  category: e.category,
+                  paidById: e.paidById,
+                  createdById: e.createdById,
+                  splitType: e.splitType,
+                  shareCount: e.shares.length,
+                  createdAt: e.createdAt,
+                }))}
+                transfers={transfers}
+                myBalance={balances[user.id] ?? 0}
+              />
+            </TabsPrimitive.Content>
+
+            <TabsPrimitive.Content value="story" className="space-y-5 pt-5">
+              <div>
+                <h3 className="font-medium">Visual story</h3>
+                <p className="text-sm text-muted-foreground">
+                  A cinematic fly-through of your trip — 3D map, photos of each place, and
+                  a voice-over.
+                </p>
+              </div>
+              {itinerary ? (
+                <TripStory tripId={trip.id} />
+              ) : (
+                <div className="flex flex-col items-center rounded-2xl border border-dashed bg-card/50 px-6 py-14 text-center">
+                  <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-brand">
+                    <Clapperboard className="size-7" />
+                  </div>
+                  <h3 className="text-lg font-semibold">No story yet</h3>
+                  <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                    Generate an itinerary first — the story is built from your located stops.
+                  </p>
                 </div>
               )}
-            </div>
-          )}
-        </TabsPrimitive.Content>
-
-        {/* Live map */}
-        <TabsPrimitive.Content value="live" className="mt-5">
-          <LiveMap
-            tripId={trip.id}
-            initialCenter={mapCenter}
-            canEdit={myMember.role !== "OBSERVER"}
-          />
-        </TabsPrimitive.Content>
-
-        {/* Budget */}
-        <TabsPrimitive.Content value="budget" className="mt-5 space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="font-medium">Shared budget</h3>
-              <p className="text-sm text-muted-foreground">
-                Log expenses, split them, and settle up.
-              </p>
-            </div>
-            <AddExpenseDialog
-              tripId={trip.id}
-              members={membersForExpense}
-              currentUserId={user.id}
-              currency={trip.currency}
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border bg-card p-5">
-              <p className="text-sm text-muted-foreground">Total spent</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {formatMoney(totalSpent, trip.currency)}
-              </p>
-            </div>
-            <div className="rounded-xl border bg-card p-5">
-              <p className="text-sm text-muted-foreground">Per person</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {formatMoney(
-                  memberIds.length ? totalSpent / memberIds.length : 0,
-                  trip.currency
-                )}
-              </p>
-            </div>
-            <div className="rounded-xl border bg-card p-5">
-              <p className="text-sm text-muted-foreground">Your balance</p>
-              <p
-                className={`mt-1 text-2xl font-semibold ${
-                  myBalance > 0.01
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : myBalance < -0.01
-                      ? "text-destructive"
-                      : ""
-                }`}
-              >
-                {myBalance > 0.01 ? "+" : ""}
-                {formatMoney(myBalance, trip.currency)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {myBalance > 0.01
-                  ? "you're owed"
-                  : myBalance < -0.01
-                    ? "you owe"
-                    : "all settled"}
-              </p>
-            </div>
-          </div>
-
-          {transfers.length > 0 ? (
-            <div className="rounded-xl border bg-card">
-              <div className="border-b px-5 py-3">
-                <h4 className="font-medium">Settle up</h4>
-              </div>
-              <ul className="divide-y">
-                {transfers.map((t, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between gap-3 px-5 py-3 text-sm"
-                  >
-                    <span>
-                      <span className="font-medium">{nameById.get(t.from)}</span>{" "}
-                      pays{" "}
-                      <span className="font-medium">{nameById.get(t.to)}</span>
-                    </span>
-                    <span className="flex items-center gap-3">
-                      <span className="font-semibold">
-                        {formatMoney(t.amount, trip.currency)}
-                      </span>
-                      <SettleButton
-                        tripId={trip.id}
-                        fromUserId={t.from}
-                        toUserId={t.to}
-                        amount={t.amount}
-                      />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            expenses.length > 0 && (
-              <div className="flex items-center gap-2 rounded-xl border bg-card p-5 text-sm text-muted-foreground">
-                <CheckCircle2 className="size-4 text-emerald-500" />
-                Everyone&apos;s settled up.
-              </div>
-            )
-          )}
-
-          <div className="rounded-xl border bg-card">
-            <div className="border-b px-5 py-3">
-              <h4 className="font-medium">Expenses</h4>
-            </div>
-            {expenses.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-                No expenses yet — add the first one.
-              </p>
-            ) : (
-              <ul className="divide-y">
-                {expenses.map((e) => {
-                  const Icon = expenseIcon(e.category)
-                  return (
-                  <li key={e.id} className="flex items-center gap-3 px-5 py-3">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                      <Icon className="size-4" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{e.description}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Paid by {nameById.get(e.paidById)} ·{" "}
-                        {e.splitType === "EQUAL" ? "split equally" : "custom split"}{" "}
-                        · {e.shares.length} people
-                      </p>
-                    </div>
-                    <span className="font-semibold">
-                      {formatMoney(e.amount, trip.currency)}
-                    </span>
-                    <DeleteExpenseButton id={e.id} />
-                  </li>
-                  )
-                })}
-              </ul>
-            )}
-          </div>
-        </TabsPrimitive.Content>
-
-        {/* Members */}
-        <TabsPrimitive.Content value="members" className="mt-5 space-y-6">
-          <div className="rounded-xl border bg-card">
-            <div className="flex items-center justify-between border-b px-5 py-3">
-              <h3 className="font-medium">On this trip</h3>
-              {isAdmin && <InviteDialog tripId={trip.id} />}
-            </div>
-            <ul className="divide-y">
-              {trip.members.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center gap-3 px-5 py-3"
-                >
-                  <Avatar className="size-9">
-                    <AvatarImage
-                      src={m.user.image ?? undefined}
-                      alt={m.user.name ?? ""}
-                    />
-                    <AvatarFallback>
-                      {memberInitials(m.user.name, m.user.email)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1.5 truncate font-medium">
-                      {m.user.name ?? m.user.email}
-                      {m.userId === user.id && (
-                        <span className="text-xs text-muted-foreground">
-                          (you)
-                        </span>
-                      )}
-                    </p>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {m.user.email}
-                    </p>
-                  </div>
-                  {m.preference ? (
-                    <span
-                      title="Preferences filled"
-                      className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"
-                    >
-                      <CheckCircle2 className="size-4" />
-                    </span>
-                  ) : (
-                    <span
-                      title="No preferences yet"
-                      className="flex items-center gap-1 text-xs text-muted-foreground"
-                    >
-                      <Circle className="size-4" />
-                    </span>
-                  )}
-                  <Badge
-                    variant={m.role === "ADMIN" ? "default" : "outline"}
-                    className="gap-1"
-                  >
-                    {m.role === "ADMIN" && <Crown className="size-3" />}
-                    {prettifyEnum(m.role)}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {trip.invites.length > 0 && (
-            <div className="rounded-xl border bg-card">
-              <div className="border-b px-5 py-3">
-                <h3 className="font-medium">Pending invites</h3>
-              </div>
-              <ul className="divide-y">
-                {trip.invites.map((inv) => (
-                  <li
-                    key={inv.id}
-                    className="flex items-center gap-3 px-5 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm">{inv.email}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Invited as {prettifyEnum(inv.role)}
-                      </p>
-                    </div>
-                    <Badge variant="secondary">Pending</Badge>
-                    {isAdmin && (
-                      <RevokeInviteButton
-                        tripId={trip.id}
-                        inviteId={inv.id}
-                      />
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </TabsPrimitive.Content>
-
-        {/* My preferences */}
-        <TabsPrimitive.Content value="preferences" className="mt-5">
-          <div className="rounded-xl border bg-card p-6">
-            <h3 className="font-medium">Your preferences</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              These shape the AI plan — the more the group shares, the better
-              the itinerary.
-            </p>
-            <div className="mt-6">
-              <PreferenceForm tripId={trip.id} defaultValues={prefDefaults} />
-            </div>
-          </div>
-        </TabsPrimitive.Content>
-
-        {/* Group insights (admin) */}
-        {isAdmin && (
-          <TabsPrimitive.Content value="insights" className="mt-5">
-            <GroupInsights
-              members={trip.members.map((m) => ({
-                preference: m.preference
-                  ? {
-                      diet: m.preference.diet,
-                      pace: m.preference.pace,
-                      stayTypes: m.preference.stayTypes,
-                      transports: m.preference.transports,
-                      interests: m.preference.interests,
-                      budgetPerDay: m.preference.budgetPerDay,
-                    }
-                  : null,
-              }))}
-            />
-          </TabsPrimitive.Content>
-        )}
+            </TabsPrimitive.Content>
           </div>
         </SidebarInset>
       </SidebarProvider>
-    </TabsPrimitive.Root>
+    </TripTabs>
   )
+}
+
+/**
+ * This member's personal checklist. On first view it's seeded from the prep
+ * guide's documents and packing list, so it appears without any extra step.
+ */
+async function loadChecklist(
+  tripId: string,
+  userId: string,
+  prep: { documents: unknown; packing: unknown } | null
+) {
+  if (prep) {
+    const existing = await prisma.checklistItem.count({ where: { tripId, userId } })
+    if (existing === 0) {
+      const docs = ((prep.documents as string[]) ?? []).map((label, i) => ({
+        tripId,
+        userId,
+        label,
+        category: "DOCUMENT" as const,
+        order: i,
+      }))
+      const packing = ((prep.packing as { category: string; items: string[] }[]) ?? []).flatMap(
+        (c, ci) =>
+          c.items.map((label, ii) => ({
+            tripId,
+            userId,
+            label,
+            category: "PACKING" as const,
+            order: 100 + ci * 20 + ii,
+          }))
+      )
+      const seed = [...docs, ...packing]
+      if (seed.length > 0) await prisma.checklistItem.createMany({ data: seed })
+    }
+  }
+  return prisma.checklistItem.findMany({
+    where: { tripId, userId },
+    orderBy: { order: "asc" },
+  })
 }

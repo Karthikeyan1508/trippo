@@ -2,95 +2,86 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, LogOut } from "lucide-react"
+import { Compass, Settings } from "lucide-react"
+import { cn } from "cn"
 
 import { Logo } from "@/components/logo"
-import { signOutAction } from "@/server/auth-actions"
+import { AccountMenuItems, type AccountUser } from "@/components/account-menu"
+import { initialsOf } from "@/lib/initials"
+import { NotificationBell } from "@/components/notification-bell"
+import { ThemeToggleButton } from "@/components/theme-switcher"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-type HeaderUser = {
-  name?: string | null
-  email?: string | null
-  image?: string | null
-}
+const NAV = [
+  { href: "/dashboard", label: "Trips", icon: Compass },
+  { href: "/settings", label: "Settings", icon: Settings },
+]
 
-function initials(user: HeaderUser) {
-  const source = user.name || user.email || "?"
-  return source
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase()
-}
-
-export function AppHeader({ user }: { user: HeaderUser }) {
+export function AppHeader({
+  user,
+  unreadCount = 0,
+}: {
+  user: AccountUser
+  unreadCount?: number
+}) {
   const pathname = usePathname()
 
-  // Trip detail pages render their own full-height sidebar chrome
-  // (with the profile menu in the sidebar footer), so the global
-  // header would just be a redundant second bar.
+  // Trip pages render their own full-height sidebar chrome (with the same
+  // account menu in its footer), so a second bar would be redundant.
   if (/^\/trips\/[^/]+/.test(pathname)) return null
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
-        <div className="flex items-center gap-6">
+    <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4">
+        <div className="flex items-center gap-8">
           <Logo href="/dashboard" />
-          <nav className="hidden sm:flex">
-            <Button asChild variant="ghost" size="sm" className="gap-1.5">
-              <Link href="/dashboard">
-                <LayoutDashboard className="size-4" />
-                Dashboard
-              </Link>
-            </Button>
+          <nav className="hidden items-center gap-1 sm:flex" aria-label="Main">
+            {NAV.map(({ href, label, icon: Icon }) => {
+              const active = pathname === href || pathname.startsWith(`${href}/`)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-2 px-3 text-xs font-medium tracking-wider uppercase transition-colors",
+                    "text-muted-foreground hover:text-foreground",
+                    active && "text-foreground shadow-[inset_0_-2px_0_0_var(--primary)]"
+                  )}
+                >
+                  <Icon className="size-4" />
+                  {label}
+                </Link>
+              )
+            })}
           </nav>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
-              <Avatar className="size-9">
-                <AvatarImage src={user.image ?? undefined} alt={user.name ?? "You"} />
-                <AvatarFallback>{initials(user)}</AvatarFallback>
-              </Avatar>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="flex flex-col">
-              <span className="truncate">{user.name ?? "Traveller"}</span>
-              <span className="truncate text-xs font-normal text-muted-foreground">
-                {user.email}
-              </span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/dashboard">
-                <LayoutDashboard className="size-4" />
-                Dashboard
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={(e) => {
-                e.preventDefault()
-                void signOutAction()
-              }}
-            >
-              <LogOut className="size-4" />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-1">
+          <NotificationBell initialUnread={unreadCount} />
+          <ThemeToggleButton />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                aria-label="Account menu"
+              >
+                <Avatar className="size-9">
+                  <AvatarImage src={user.image ?? undefined} alt={user.name ?? "You"} />
+                  <AvatarFallback>{initialsOf(user)}</AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <AccountMenuItems user={user} />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </header>
   )

@@ -30,6 +30,12 @@ model User {
   approvals     Approval[]
   checklistItems ChecklistItem[]
   locations     MemberLocation[]
+  createdPolls  Poll[]          @relation("PollCreator")
+  pollVotes     PollVote[]
+  productSuggestions ProductSuggestion[] @relation("ProductSuggester")
+  productVotes  ProductVote[]
+  notifications     Notification[]
+  pushSubscriptions PushSubscription[]
 }
 
 model Account {
@@ -83,6 +89,11 @@ model Trip {
   budgetPerPerson Int?
   currency        String     @default("INR")
   status          TripStatus @default(PLANNING)
+  // Unguessable code behind the shareable /join/<code> invite link.
+  joinCode        String     @unique
+  // Destination photo for cards and headers. null = not looked up yet,
+  // "" = looked up but nothing usable was found (don't retry on every visit).
+  coverImage      String?
   createdById     String
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -98,6 +109,10 @@ model Trip {
   checkpoints Checkpoint[]
   expenses    Expense[]
   settlements Settlement[]
+  polls       Poll[]
+  stayOptions StayOption[]
+  products    ProductSuggestion[]
+  notifications Notification[]
 
   @@index([createdById])
 }
@@ -116,6 +131,57 @@ model TripMember {
 
   @@unique([tripId, userId])
   @@index([userId])
+}
+
+model Poll {
+  id          String     @id @default(cuid())
+  tripId      String
+  question    String
+  options     Json
+  createdById String
+  closesAt    DateTime?
+  createdAt   DateTime   @default(now())
+
+  trip      Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy User       @relation("PollCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  votes     PollVote[]
+
+  @@index([tripId])
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  userId    String
+  option    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@index([userId])
+}
+
+model StayOption {
+  id        String   @id @default(cuid())
+  tripId    String
+  name      String
+  price     String?
+  rating    Float?
+  type      String?
+  amenities String[]
+  link      String?
+  phone     String?
+  thumbnail String?
+  selected  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
 }
 
 model Invite {
@@ -455,4 +521,81 @@ enum ExpenseCategory {
 enum SplitType {
   EQUAL
   CUSTOM
+}
+
+// ─────────────────────────────────────────────────────────────
+// Gear & shopping: products the crew suggests for the trip
+// ─────────────────────────────────────────────────────────────
+
+model ProductSuggestion {
+  id            String   @id @default(cuid())
+  tripId        String
+  suggestedById String
+  asin          String
+  title         String
+  link          String
+  image         String?
+  price         String?
+  priceValue    Float?
+  rating        Float?
+  reviews       Int?
+  note          String?
+  query         String?
+  createdAt     DateTime @default(now())
+
+  trip        Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  suggestedBy User          @relation("ProductSuggester", fields: [suggestedById], references: [id], onDelete: Cascade)
+  votes       ProductVote[]
+
+  @@unique([tripId, asin])
+  @@index([tripId])
+}
+
+model ProductVote {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  product ProductSuggestion @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Notifications: an in-app inbox plus browser/device push
+// ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  tripId    String?
+  type      String
+  title     String
+  body      String?
+  // Where clicking it should land, e.g. /trips/<id>?tab=decisions
+  url       String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip Trip? @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

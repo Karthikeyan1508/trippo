@@ -54,7 +54,7 @@ export function ItineraryMap({ stops }: { stops: MapStop[] }) {
         const icon = L.divIcon({
           className: "",
           html: `<div class="tp-stop">${activityIconSvg(s.iconKey, {
-            color: "#ffffff",
+            color: "currentColor",
             size: 16,
             strokeWidth: 2.25,
           })}<span class="tp-n">${s.n}</span></div>`,
@@ -84,7 +84,7 @@ export function ItineraryMap({ stops }: { stops: MapStop[] }) {
 
   if (stops.length === 0) {
     return (
-      <div className="flex h-[300px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-card/50 text-center lg:h-[560px]">
+      <div className="flex h-[220px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-card/50 text-center xl:h-[420px]">
         <MapPinned className="size-7 text-muted-foreground" />
         <p className="max-w-[15rem] text-sm text-muted-foreground">
           The map fills in once the plan includes located places.
@@ -96,14 +96,14 @@ export function ItineraryMap({ stops }: { stops: MapStop[] }) {
   return (
     <>
       <style>{`
-        .tp-stop{position:relative;width:32px;height:32px;border-radius:9999px;background:var(--primary);border:2px solid #fff;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.35)}
+        .tp-stop{position:relative;width:32px;height:32px;border-radius:0;background:var(--primary);color:var(--primary-foreground);border:2px solid #fff;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.35)}
         .tp-stop svg{width:16px;height:16px}
-        .tp-n{position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:9999px;background:#fff;color:var(--primary);font-size:10px;font-weight:700;display:grid;place-items:center;border:1.5px solid var(--primary)}
+        .tp-n{position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:0;background:var(--primary-foreground);color:var(--primary);font-size:10px;font-weight:700;display:grid;place-items:center;border:1.5px solid #fff}
         .leaflet-container{font:inherit}
       `}</style>
       <div
         ref={containerRef}
-        className="z-0 h-[320px] w-full overflow-hidden rounded-xl border bg-muted lg:h-[560px]"
+        className="z-0 h-[300px] w-full overflow-hidden rounded-xl border bg-muted xl:h-[min(640px,calc(100svh-8rem))]"
       />
     </>
   )

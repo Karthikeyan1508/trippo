@@ -5,6 +5,9 @@ import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
 import { splitEqual } from "@/lib/budget"
+import { formatMoney } from "@/lib/format"
+import { notify, personName } from "@/server/notify"
+import { tripUrl } from "@/lib/notifications"
 
 type ExpenseCategoryT =
   | "FOOD"
@@ -46,9 +49,12 @@ export async function addExpense(
     return { ok: false, error: "Enter a valid amount." }
   }
 
-  const memberIds = trip.members.map((m) => m.userId)
+  // Observers follow the trip but don't share its costs.
+  const memberIds = trip.members
+    .filter((m) => m.role !== "OBSERVER")
+    .map((m) => m.userId)
   if (!memberIds.includes(input.paidById)) {
-    return { ok: false, error: "The payer must be a trip member." }
+    return { ok: false, error: "The payer must be a travelling member." }
   }
 
   let shares: { userId: string; amount: number }[]
@@ -88,6 +94,16 @@ export async function addExpense(
     },
   })
 
+  await notify({
+    tripId,
+    actorId: user.id,
+    to: { users: shares.map((s) => s.userId) },
+    type: "expense_added",
+    title: `${personName(user)} added an expense`,
+    body: `${description} · ${formatMoney(amount, trip.currency)}`,
+    url: tripUrl(tripId, "budget"),
+  })
+
   revalidatePath(`/trips/${tripId}`)
   return { ok: true }
 }
@@ -100,6 +116,12 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
     where: { tripId_userId: { tripId: exp.tripId, userId: user.id } },
   })
   if (!me) return { ok: false, error: "Not allowed." }
+  if (me.role !== "ADMIN" && exp.createdById !== user.id) {
+    return {
+      ok: false,
+      error: "Only the person who added this expense (or the admin) can delete it.",
+    }
+  }
   await prisma.expense.delete({ where: { id } })
   revalidatePath(`/trips/${exp.tripId}`)
   return { ok: true }
@@ -116,12 +138,47 @@ export async function recordSettlement(
     where: { tripId_userId: { tripId, userId: user.id } },
   })
   if (!me) return { ok: false, error: "Not allowed." }
+  if (fromUserId === toUserId) {
+    return { ok: false, error: "Payer and receiver must be different people." }
+  }
+  const parties = await prisma.tripMember.count({
+    where: { tripId, userId: { in: [fromUserId, toUserId] } },
+  })
+  if (parties !== 2) {
+    return { ok: false, error: "Both people must be on this trip." }
+  }
+  if (me.role !== "ADMIN" && user.id !== fromUserId && user.id !== toUserId) {
+    return {
+      ok: false,
+      error: "Only the payer, the receiver or the admin can record a payment.",
+    }
+  }
   const amt = Math.round(Number(amount) * 100) / 100
   if (!Number.isFinite(amt) || amt <= 0) {
     return { ok: false, error: "Invalid amount." }
   }
   await prisma.settlement.create({
     data: { tripId, fromUserId, toUserId, amount: amt },
+  })
+  const [people, tripRow] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: [fromUserId, toUserId] } },
+      select: { id: true, name: true, email: true },
+    }),
+    prisma.trip.findUnique({ where: { id: tripId }, select: { currency: true } }),
+  ])
+  const nameOf = (id: string) => {
+    const u = people.find((p) => p.id === id)
+    return u ? personName(u) : "Someone"
+  }
+  await notify({
+    tripId,
+    actorId: user.id,
+    to: { users: [fromUserId, toUserId] },
+    type: "payment_received",
+    title: `${nameOf(fromUserId)} paid ${nameOf(toUserId)}`,
+    body: formatMoney(amt, tripRow?.currency ?? "INR"),
+    url: tripUrl(tripId, "budget"),
   })
   revalidatePath(`/trips/${tripId}`)
   return { ok: true }

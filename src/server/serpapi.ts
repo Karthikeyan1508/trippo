@@ -41,6 +41,16 @@ export type EventLite = {
   link?: string
 }
 
+export type TransportLite = {
+  name: string
+  mode?: string
+  price?: string
+  rating?: number
+  phone?: string
+  link?: string
+  address?: string
+}
+
 export type ResearchBundle = {
   available: boolean
   attractions: PlaceLite[]
@@ -62,7 +72,8 @@ function queryKey(params: SerpParams) {
 async function serpFetch(
   tripId: string,
   engine: string,
-  params: SerpParams
+  params: SerpParams,
+  ttlDays = CACHE_TTL_DAYS
 ): Promise<any | null> {
   if (!hasSerpApi()) return null
 
@@ -99,13 +110,13 @@ async function serpFetch(
       queryKey: key,
       params: params as any,
       response: json,
-      expiresAt: addDays(new Date(), CACHE_TTL_DAYS),
+      expiresAt: addDays(new Date(), ttlDays),
     },
     update: {
       params: params as any,
       response: json,
       fetchedAt: new Date(),
-      expiresAt: addDays(new Date(), CACHE_TTL_DAYS),
+      expiresAt: addDays(new Date(), ttlDays),
     },
   })
   return json
@@ -182,6 +193,29 @@ export async function fetchHotels(
     amenities: Array.isArray(p.amenities) ? p.amenities.slice(0, 5) : undefined,
     link: p.link,
     thumbnail: p.images?.[0]?.thumbnail,
+  }))
+}
+
+/** Three local, bookable transport options for a particular leg. Cached per trip. */
+export async function fetchLocalTransport(
+  tripId: string,
+  from: string,
+  to: string
+): Promise<TransportLite[]> {
+  const json = await serpFetch(tripId, "google_local", {
+    q: `transport service ${from} to ${to}`,
+    hl: "en",
+    gl: "in",
+  })
+  const local: any[] = json?.local_results ?? []
+  return local.slice(0, 3).map((r) => ({
+    name: r.title ?? r.name ?? "Local transport service",
+    mode: r.type ?? r.category,
+    price: r.price,
+    rating: num(r.rating),
+    phone: r.phone,
+    link: r.website ?? r.links?.website ?? r.link ?? r.directions,
+    address: r.address,
   }))
 }
 
@@ -273,4 +307,71 @@ export async function researchTrip(input: {
   ])
 
   return { available: true, attractions, hotels, restaurants, events }
+}
+
+
+// ── Amazon product search ───────────────────────────────────────────────
+
+export type ProductLite = {
+  asin: string
+  title: string
+  /** Display price exactly as the store shows it, e.g. "₹1,499". */
+  price?: string
+  priceValue?: number
+  oldPriceValue?: number
+  /** Whole-number percentage off, when a was-price is shown. */
+  discountPct?: number
+  rating?: number
+  reviews?: number
+  image?: string
+  /** "2K+ bought in past month" style social proof, if the store shows it. */
+  boughtLastMonth?: string
+}
+
+/**
+ * Searches an Amazon storefront through SerpApi's `amazon` engine. Cached per
+ * trip for a day, so the whole crew shares one credit per search.
+ */
+export async function fetchAmazonProducts(
+  tripId: string,
+  query: string,
+  domain: string,
+  sort?: string
+): Promise<ProductLite[]> {
+  const json = await serpFetch(
+    tripId,
+    "amazon",
+    { k: query, amazon_domain: domain, s: sort },
+    1
+  )
+  const results: any[] = json?.organic_results ?? []
+
+  const seen = new Set<string>()
+  const out: ProductLite[] = []
+  for (const r of results) {
+    const asin = typeof r.asin === "string" ? r.asin : undefined
+    if (!asin || seen.has(asin) || !r.title || !r.thumbnail) continue
+    seen.add(asin)
+
+    const priceValue = num(r.extracted_price)
+    const oldPriceValue = num(r.extracted_old_price)
+    out.push({
+      asin,
+      title: String(r.title),
+      price: typeof r.price === "string" ? r.price : undefined,
+      priceValue,
+      oldPriceValue,
+      discountPct:
+        priceValue != null && oldPriceValue != null && oldPriceValue > priceValue
+          ? Math.round((1 - priceValue / oldPriceValue) * 100)
+          : undefined,
+      rating: num(r.rating),
+      reviews: num(r.reviews),
+      image: r.thumbnail,
+      boughtLastMonth:
+        typeof r.bought_last_month === "string" ? r.bought_last_month : undefined,
+    })
+    if (out.length >= 24) break
+  }
+  return out
 }

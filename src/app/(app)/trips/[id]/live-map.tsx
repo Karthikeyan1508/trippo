@@ -14,6 +14,8 @@ import {
   UtensilsCrossed,
   Handshake,
   TriangleAlert,
+  ShieldCheck,
+  BellRing,
   type LucideIcon,
 } from "lucide-react"
 
@@ -68,7 +70,7 @@ function CpIcon({ type, className }: { type: string; className?: string }) {
 function cpMarkerSvg(type: string) {
   const Icon = CP_ICONS[type] ?? MapPin
   return renderToStaticMarkup(
-    <Icon size={16} color="#ffffff" strokeWidth={2.25} />
+    <Icon size={16} color="currentColor" strokeWidth={2.25} />
   )
 }
 
@@ -92,6 +94,14 @@ function escapeHtml(s: string) {
   )
 }
 
+function distanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad
+  const dLng = (b.lng - a.lng) * rad
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
+}
+
 export function LiveMap({
   tripId,
   initialCenter,
@@ -109,6 +119,7 @@ export function LiveMap({
   const watchRef = React.useRef<number | null>(null)
   const lastSentRef = React.useRef(0)
   const centeredRef = React.useRef(false)
+  const announcedCheckpointRef = React.useRef<string | null>(null)
 
   const [ready, setReady] = React.useState(false)
   const [members, setMembers] = React.useState<LiveMember[]>([])
@@ -120,6 +131,7 @@ export function LiveMap({
   const [pendingName, setPendingName] = React.useState("")
   const [pendingType, setPendingType] = React.useState("POINT")
   const [savingCp, setSavingCp] = React.useState(false)
+  const [nearbyCheckpoint, setNearbyCheckpoint] = React.useState<LiveCheckpoint | null>(null)
 
   async function refetch() {
     const r = await getLiveData(tripId)
@@ -254,11 +266,6 @@ export function LiveMap({
   // Location sharing via the Geolocation API.
   React.useEffect(() => {
     if (!sharing) return
-    if (!("geolocation" in navigator)) {
-      toast.error("Geolocation isn't supported in this browser.")
-      setSharing(false)
-      return
-    }
     watchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude, longitude, accuracy } = pos.coords
@@ -267,6 +274,17 @@ export function LiveMap({
           centeredRef.current = true
         }
         const now = Date.now()
+        const nearby = checkpoints.find((checkpoint) => distanceMeters({ lat: latitude, lng: longitude }, checkpoint) <= 150) ?? null
+        setNearbyCheckpoint(nearby)
+        if (nearby && announcedCheckpointRef.current !== nearby.id) {
+          announcedCheckpointRef.current = nearby.id
+          const title = nearby.type === "DANGER" ? "Caution checkpoint nearby" : `Arriving near ${nearby.name}`
+          toast( title, { description: nearby.type === "DANGER" ? "Take a moment to check in with your group." : "You’re within 150 metres of this trip checkpoint." })
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification(title, { body: nearby.type === "DANGER" ? "Take a moment to check in with your group." : "You’re within 150 metres of this trip checkpoint." })
+          }
+        }
+        if (!nearby) announcedCheckpointRef.current = null
         if (now - lastSentRef.current < 8000) return
         lastSentRef.current = now
         updateMyLocation(tripId, latitude, longitude, accuracy).then(() => refetch())
@@ -288,9 +306,13 @@ export function LiveMap({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sharing, tripId])
+  }, [sharing, tripId, checkpoints])
 
   function toggleShare(v: boolean) {
+    if (v && !("geolocation" in navigator)) {
+      toast.error("Geolocation isn't supported in this browser.")
+      return
+    }
     setSharing(v)
     if (!v) {
       stopSharingLocation(tripId).then(() => refetch())
@@ -320,18 +342,18 @@ export function LiveMap({
   return (
     <div className="space-y-4">
       <style>{`
-        .tp-pin{width:40px;height:40px;border-radius:9999px;overflow:hidden;border:3px solid #10b981;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.35);display:grid;place-items:center;font-weight:600;font-size:12px;color:#111}
+        .tp-pin{width:40px;height:40px;border-radius:0;overflow:hidden;border:3px solid #10b981;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.35);display:grid;place-items:center;font-weight:600;font-size:12px;color:#111}
         .tp-pin img{width:100%;height:100%;object-fit:cover}
         .tp-pin-me{border-color:#2563eb}
-        .tp-cp{width:30px;height:30px;border-radius:9999px;background:var(--primary);border:2px solid #fff;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.35);cursor:pointer}
+        .tp-cp{width:30px;height:30px;border-radius:0;background:var(--primary);color:var(--primary-foreground);border:2px solid #fff;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.35);cursor:pointer}
         .tp-cp svg{width:16px;height:16px}
-        .tp-cp-danger{background:#dc2626}
+        .tp-cp-danger{background:#dc2626;color:#fff}
         .leaflet-container{font:inherit}
       `}</style>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
         <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
+          <div className="grid size-9 place-items-center rounded-lg bg-primary/10 text-brand">
             <Radio className="size-5" />
           </div>
           <div>
@@ -349,6 +371,17 @@ export function LiveMap({
             </span>
           )}
           <Switch checked={sharing} onCheckedChange={toggleShare} />
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex items-start gap-3 rounded-xl border bg-card p-4">
+          <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600"><ShieldCheck className="size-5" /></div>
+          <div><p className="text-sm font-medium">Checkpoint awareness</p><p className="mt-0.5 text-xs leading-5 text-muted-foreground">We’ll alert this device within 150m of a saved checkpoint while location sharing is on.</p></div>
+        </div>
+        <div className={`flex items-start gap-3 rounded-xl border p-4 ${nearbyCheckpoint?.type === "DANGER" ? "border-destructive/40 bg-destructive/5" : "bg-card"}`}>
+          <div className={`grid size-9 shrink-0 place-items-center rounded-lg ${nearbyCheckpoint ? "bg-primary/10 text-brand" : "bg-muted text-muted-foreground"}`}><BellRing className="size-5" /></div>
+          <div><p className="text-sm font-medium">{nearbyCheckpoint ? `Near ${nearbyCheckpoint.name}` : "No nearby checkpoint"}</p><p className="mt-0.5 text-xs leading-5 text-muted-foreground">{nearbyCheckpoint?.type === "DANGER" ? "Caution zone — check in with the group." : nearbyCheckpoint ? "You’re inside the checkpoint radius." : "Your next proximity update will appear here."}</p></div>
         </div>
       </div>
 
@@ -410,7 +443,7 @@ export function LiveMap({
                     <CpIcon
                       type={c.type}
                       className={`size-4 shrink-0 ${
-                        c.type === "DANGER" ? "text-destructive" : "text-primary"
+                        c.type === "DANGER" ? "text-destructive" : "text-brand"
                       }`}
                     />
                     {c.name}

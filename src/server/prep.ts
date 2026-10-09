@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache"
 
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
+import { notify } from "@/server/notify"
+import { tripUrl } from "@/lib/notifications"
 import { fetchTravelTips } from "@/server/serpapi"
 import {
   generatePrepWithGroq,
@@ -84,6 +86,16 @@ export async function generatePrep(tripId: string): Promise<ActionResult> {
       model: usedGroq ? process.env.GROQ_MODEL || "openai/gpt-oss-120b" : null,
       generatedAt: new Date(),
     },
+  })
+
+  await notify({
+    tripId,
+    actorId: user.id,
+    to: "others",
+    type: "prep_ready",
+    title: "The prep guide is ready",
+    body: `Etiquette, phrases and a packing list · ${trip.name}`,
+    url: tripUrl(tripId, "prep"),
   })
 
   revalidatePath(`/trips/${tripId}`)

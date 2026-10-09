@@ -12,10 +12,10 @@ export function Logo({
   return (
     <Link
       href={href}
-      className={cn("group inline-flex items-center gap-2", className)}
+      className={cn("group inline-flex items-center gap-2.5", className)}
     >
-      <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-transform group-hover:-rotate-6">
-        <Compass className="size-5" />
+      <span className="grid size-8 place-items-center bg-primary text-primary-foreground transition-transform group-hover:scale-105">
+        <Compass className="size-[18px]" />
       </span>
       <span className="text-lg font-semibold tracking-tight">Trippo</span>
     </Link>

@@ -45,7 +45,7 @@ function CountRow({
               className="inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-sm"
             >
               {render(k)}
-              <span className="grid size-5 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              <span className="grid size-5 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-brand">
                 {n}
               </span>
             </span>

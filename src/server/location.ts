@@ -68,11 +68,21 @@ export async function stopSharingLocation(tripId: string): Promise<ActionResult>
   return { ok: true }
 }
 
+/** A shared location is only trusted (and kept) for this long without a refresh. */
+const LOCATION_TTL_MS = 30 * 60 * 1000
+
 /** Poll target: all members' live locations + checkpoints for a trip. */
 export async function getLiveData(tripId: string): Promise<LiveData> {
   const user = await requireUser()
   const member = await membership(tripId, user.id)
   if (!member) return { ok: false, error: "You're not a member of this trip." }
+
+  // Privacy: someone who closed the tab without switching sharing off must
+  // not stay on the group map forever. Purge anything that stopped updating.
+  const cutoff = new Date(Date.now() - LOCATION_TTL_MS)
+  await prisma.memberLocation.deleteMany({
+    where: { tripId, updatedAt: { lt: cutoff } },
+  })
 
   const [locations, checkpoints] = await Promise.all([
     prisma.memberLocation.findMany({

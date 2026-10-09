@@ -4,13 +4,16 @@ import { revalidatePath } from "next/cache"
 
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
+import { syncPlanState } from "@/lib/plan-state"
+import { notify, personName } from "@/server/notify"
+import { tripUrl } from "@/lib/notifications"
 
 type ActionResult = { ok: true; locked: boolean } | { ok: false; error: string }
 
 /**
  * Record the current member's approval (or change request) for an itinerary.
  * When every non-observer member has approved, the plan locks and the trip
- * is marked CONFIRMED.
+ * is marked CONFIRMED (see syncPlanState).
  */
 export async function setApproval(
   itineraryId: string,
@@ -31,6 +34,16 @@ export async function setApproval(
     return { ok: false, error: "Observers can't vote on the plan." }
   }
 
+  // Only the newest plan can be voted on — older versions are history.
+  const latest = await prisma.itinerary.findFirst({
+    where: { tripId: itinerary.tripId },
+    orderBy: { generatedAt: "desc" },
+    select: { id: true },
+  })
+  if (latest?.id !== itineraryId) {
+    return { ok: false, error: "This plan was replaced — refresh to see the latest." }
+  }
+
   const cleanReason = reason?.trim() ? reason.trim().slice(0, 500) : null
 
   await prisma.approval.upsert({
@@ -39,23 +52,32 @@ export async function setApproval(
     update: { status, reason: cleanReason },
   })
 
-  // Recompute lock state across all non-observer members.
-  const approvers = itinerary.trip.members.filter((m) => m.role !== "OBSERVER")
-  const approvals = await prisma.approval.findMany({ where: { itineraryId } })
-  const approvedIds = new Set(
-    approvals.filter((a) => a.status === "APPROVED").map((a) => a.userId)
-  )
-  const locked =
-    approvers.length > 0 && approvers.every((m) => approvedIds.has(m.userId))
+  const wasLocked = itinerary.status === "FINAL"
+  const { locked } = await syncPlanState(itinerary.tripId)
+  const tripId = itinerary.tripId
 
-  await prisma.itinerary.update({
-    where: { id: itineraryId },
-    data: { status: locked ? "FINAL" : "DRAFT" },
-  })
-  await prisma.trip.update({
-    where: { id: itinerary.tripId },
-    data: { status: locked ? "CONFIRMED" : "VOTING" },
-  })
+  if (status === "REJECTED") {
+    await notify({
+      tripId,
+      actorId: user.id,
+      to: "admins",
+      type: "changes_requested",
+      title: `${personName(user)} asked for changes`,
+      body: cleanReason ?? itinerary.trip.name,
+      url: tripUrl(tripId, "itinerary"),
+    })
+  }
+  if (locked && !wasLocked) {
+    await notify({
+      tripId,
+      actorId: user.id,
+      to: "others",
+      type: "plan_locked",
+      title: "The plan is locked in",
+      body: `Everyone approved · ${itinerary.trip.name}`,
+      url: tripUrl(tripId, "itinerary"),
+    })
+  }
 
   revalidatePath(`/trips/${itinerary.tripId}`)
   return { ok: true, locked }

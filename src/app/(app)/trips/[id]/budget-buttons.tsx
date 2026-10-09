@@ -53,10 +53,12 @@ export function DeleteExpenseButton({ id }: { id: string }) {
   const [pending, startTransition] = React.useTransition()
   const router = useRouter()
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="icon"
       disabled={pending}
       aria-label="Delete expense"
-      className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+      className="size-8 text-muted-foreground hover:text-destructive"
       onClick={() =>
         startTransition(async () => {
           const res = await deleteExpense(id)
@@ -70,6 +72,6 @@ export function DeleteExpenseButton({ id }: { id: string }) {
       ) : (
         <Trash2 className="size-4" />
       )}
-    </button>
+    </Button>
   )
 }

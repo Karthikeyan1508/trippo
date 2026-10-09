@@ -25,7 +25,7 @@ export function PrepView({ prep }: { prep: PrepData }) {
         {prep.etiquette.length > 0 && (
           <div className="rounded-2xl border bg-card p-5">
             <h4 className="mb-3 flex items-center gap-2 font-medium">
-              <ScrollText className="size-4 text-primary" />
+              <ScrollText className="size-4 text-brand" />
               Local etiquette &amp; tips
             </h4>
             <ul className="space-y-2">
@@ -45,7 +45,7 @@ export function PrepView({ prep }: { prep: PrepData }) {
         {prep.phrases.length > 0 && (
           <div className="rounded-2xl border bg-card p-5">
             <h4 className="mb-3 flex items-center gap-2 font-medium">
-              <Languages className="size-4 text-primary" />
+              <Languages className="size-4 text-brand" />
               Handy phrases
             </h4>
             <ul className="space-y-2">

@@ -4,6 +4,7 @@ import { Compass, ShieldCheck, Sparkles, MapPin, Wallet } from "lucide-react"
 
 import { auth } from "@/auth"
 import { signInWithGoogle, devSignIn } from "@/server/auth-actions"
+import { safeRedirectPath } from "@/lib/redirect"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -31,18 +32,33 @@ function GoogleIcon({ className }: { className?: string }) {
   )
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string }>
+}) {
+  const { callbackUrl } = await searchParams
+  const next = safeRedirectPath(callbackUrl)
   const session = await auth()
-  if (session?.user) redirect("/dashboard")
+  if (session?.user) redirect(next)
 
   const isDev = process.env.NODE_ENV !== "production"
+  const invited = next.startsWith("/join/")
 
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
       {/* Brand / about the product */}
-      <div className="relative hidden flex-col justify-between bg-primary p-10 text-primary-foreground lg:flex">
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-primary p-12 text-primary-foreground lg:flex">
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "repeating-radial-gradient(circle at 85% 115%, transparent 0 22px, oklch(0.27 0.07 132 / 0.12) 22px 23px), radial-gradient(circle at 12% 8%, oklch(1 0 0 / 0.35), transparent 50%)",
+          }}
+        />
         <Link href="/" className="flex items-center gap-2.5">
-          <span className="grid size-9 place-items-center rounded-lg bg-primary-foreground text-primary">
+          <span className="grid size-9 place-items-center rounded-lg bg-primary-foreground text-brand">
             <Compass className="size-5" />
           </span>
           <span className="text-xl font-semibold tracking-tight">Trippo</span>
@@ -57,16 +73,16 @@ export default async function LoginPage() {
             budgets — so the whole crew stays on the same page.
           </p>
 
-          <ul className="mt-8 space-y-3 text-primary-foreground/80">
-            <li className="flex items-center gap-3">
+          <ul className="mt-10 space-y-3 text-primary-foreground">
+            <li className="flex items-center gap-3 border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3 backdrop-blur-md">
               <Sparkles className="size-5 shrink-0" />
               AI plans built from real flights, stays &amp; places
             </li>
-            <li className="flex items-center gap-3">
+            <li className="flex items-center gap-3 border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3 backdrop-blur-md">
               <MapPin className="size-5 shrink-0" />
               A live map of everyone on the trip
             </li>
-            <li className="flex items-center gap-3">
+            <li className="flex items-center gap-3 border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3 backdrop-blur-md">
               <Wallet className="size-5 shrink-0" />
               Split expenses and settle up automatically
             </li>
@@ -79,7 +95,7 @@ export default async function LoginPage() {
       </div>
 
       {/* Sign-in */}
-      <div className="flex flex-col p-6 md:p-10">
+      <div className="relative flex flex-col p-6 md:p-12">
         <div className="flex items-center justify-between lg:hidden">
           <Link href="/" className="flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
@@ -93,14 +109,17 @@ export default async function LoginPage() {
           <div className="w-full max-w-sm">
             <div className="space-y-2">
               <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-                Welcome back
+                {invited ? "You're invited" : "Welcome back"}
               </h1>
               <p className="text-lg text-muted-foreground">
-                Sign in to plan your next group trip.
+                {invited
+                  ? "Sign in to join the trip your friends are planning."
+                  : "Sign in to plan your next group trip."}
               </p>
             </div>
 
             <form action={signInWithGoogle} className="mt-8">
+              <input type="hidden" name="callbackUrl" value={next} />
               <Button
                 type="submit"
                 variant="outline"
@@ -128,6 +147,7 @@ export default async function LoginPage() {
                 </div>
 
                 <form action={devSignIn} className="space-y-3">
+                  <input type="hidden" name="callbackUrl" value={next} />
                   <Input
                     name="email"
                     type="email"
