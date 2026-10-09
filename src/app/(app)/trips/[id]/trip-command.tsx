@@ -6,6 +6,7 @@ import { useTheme } from "next-themes"
 import { CornerDownLeft, LayoutDashboard, Moon, Search, Settings, Sun } from "lucide-react"
 
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -73,6 +74,7 @@ export function TripCommand({ isAdmin }: { isAdmin: boolean }) {
         title="Jump to a section"
         description="Search sections and actions"
       >
+        <Command>
         <CommandInput placeholder="Where to? Try budget or crew…" />
         <CommandList>
           <CommandEmpty>Nothing matches that.</CommandEmpty>
@@ -108,6 +110,7 @@ export function TripCommand({ isAdmin }: { isAdmin: boolean }) {
             </CommandItem>
           </CommandGroup>
         </CommandList>
+        </Command>
       </CommandDialog>
     </>
   )

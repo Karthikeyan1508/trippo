@@ -98,6 +98,23 @@ Notes for contributors:
 - Anything that can change who has approved the plan must call
   `syncPlanState(tripId)`.
 
+## How the itinerary route is built
+
+Plans are built route-first, so they are travellable, not just a list of places:
+
+1. **Gateway and mode.** From the trip's origin city and destination, Trippo decides flight
+   or road (`src/lib/airports.ts`), and for flights fetches real one-way fares and times
+   with SerpApi's `google_flights` engine, picking an early arrival and a late direct return.
+2. **Bases.** The model proposes where to sleep; code keeps only bases inside the chosen
+   destination, rejects any leg that is too long for the trip length (90 minutes by road for
+   3 days or fewer), and orders the loop to be the shortest (`src/lib/geo.ts`, exact up to 12 stops).
+3. **Days.** Each day gets a time window set by the real flights and transfers, and a set of
+   nearby places ordered along the shortest path, so a day never zigzags.
+4. **Wording.** The model only writes the free-time parts around that fixed skeleton, and its
+   output is checked against it (invented far-off places are dropped, times are repaired).
+
+Without Groq, the same skeleton produces a complete deterministic plan.
+
 ## Notifications & installing the app
 
 - **In-app inbox**: every crew action that matters (votes, polls, gear picks,

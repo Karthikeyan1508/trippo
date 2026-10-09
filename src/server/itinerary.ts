@@ -8,6 +8,8 @@ import { requireUser } from "@/lib/session"
 import { notify } from "@/server/notify"
 import { tripUrl } from "@/lib/notifications"
 import { researchTrip, type ResearchBundle, type PlaceLite } from "@/server/serpapi"
+import { planRoute, type Pace } from "@/server/route-planner"
+import { buildRoutedItinerary } from "@/server/route-itinerary"
 import {
   generateItineraryWithGroq,
   type GeneratedItinerary,
@@ -94,14 +96,36 @@ export async function generateItinerary(tripId: string): Promise<ActionResult> {
     select: { name: true, price: true },
   })
 
-  // 1) SerpApi research (cached; empty if no key).
-  const research = await researchTrip({
+  // 1) Route first: where to sleep, how to get there and back, what each day can hold.
+  const paceChoice: Pace =
+    (pace.RELAXED ?? 0) > (pace.PACKED ?? 0) ? "RELAXED" : (pace.PACKED ?? 0) > (pace.RELAXED ?? 0) ? "PACKED" : "BALANCED"
+  const route = await planRoute({
     tripId,
+    originCity: trip.originCity,
     destination: trip.destination,
-    checkIn: iso(trip.startDate),
-    checkOut: iso(trip.endDate),
+    startDate: iso(trip.startDate),
+    endDate: iso(trip.endDate),
+    days,
+    pace: paceChoice,
+    interests: Object.keys(interests),
+    mustCover: mustCover.flatMap((m) => m.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean)),
     dietQuery,
+    chosenStayName: chosenStay?.name ?? null,
+  }).catch((error) => {
+    console.error("Route planning failed:", error)
+    return null
   })
+
+  // The old destination-wide research is only needed when there is no route to build on.
+  const research: ResearchBundle = route
+    ? { available: true, attractions: [], hotels: [], restaurants: [], events: [] }
+    : await researchTrip({
+        tripId,
+        destination: trip.destination,
+        checkIn: iso(trip.startDate),
+        checkOut: iso(trip.endDate),
+        dietQuery,
+      })
 
   const ctx: ItineraryContext = {
     destination: trip.destination,
@@ -129,10 +153,18 @@ export async function generateItinerary(tripId: string): Promise<ActionResult> {
     research,
   }
 
-  // 2) Groq reasoning → structured plan. Fall back to a deterministic sample.
-  let plan = await generateItineraryWithGroq(ctx)
-  const usedGroq = plan !== null
-  if (!plan) plan = buildSampleItinerary(ctx)
+  // 2) Write the days around that route. Without a route, fall back to the older flow.
+  let plan: GeneratedItinerary | null = null
+  let usedGroq = false
+  if (route) {
+    const built = await buildRoutedItinerary(ctx, route)
+    plan = built.itinerary
+    usedGroq = built.usedModel
+  } else {
+    plan = await generateItineraryWithGroq(ctx)
+    usedGroq = plan !== null
+    if (!plan) plan = buildSampleItinerary(ctx)
+  }
 
   const source = usedGroq ? "AI" : "SAMPLE"
   const model = usedGroq
@@ -159,9 +191,18 @@ export async function generateItinerary(tripId: string): Promise<ActionResult> {
           summary: d.summary ?? null,
           items: {
             create: d.items.map((it, idx) => {
-              const match = it.placeName
-                ? matchPlace(it.placeName, research)
-                : undefined
+              const match = it.geo
+                ? {
+                    address: it.geo.address,
+                    lat: it.geo.lat,
+                    lng: it.geo.lng,
+                    rating: it.geo.rating,
+                    engine: it.geo.engine,
+                    link: it.geo.url,
+                  }
+                : it.placeName
+                  ? matchPlace(it.placeName, research)
+                  : undefined
               return {
                 order: idx,
                 startTime: it.startTime ?? null,
@@ -174,7 +215,7 @@ export async function generateItinerary(tripId: string): Promise<ActionResult> {
                 lat: match?.lat ?? null,
                 lng: match?.lng ?? null,
                 rating: match?.rating ?? null,
-                sourceEngine: match ? match.engine : null,
+                sourceEngine: match?.engine ?? null,
                 sourceUrl: match?.link ?? null,
                 why: it.why ?? null,
               }

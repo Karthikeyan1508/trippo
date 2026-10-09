@@ -15,6 +15,7 @@ import {
 import { computeBalances, settleUp } from "@/lib/budget"
 import { computeJourney, phaseLabel, tripPhase } from "@/lib/journey"
 import { activityIconKey } from "@/lib/trip-icons"
+import { haversineKm } from "@/lib/geo"
 import type { PreferenceInput, CreateTripInput } from "@/lib/validators"
 import {
   Sidebar,
@@ -143,9 +144,22 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
   // ── Located stops → numbered map pins ─────────────────────────────
   const stops: MapStop[] = []
   const stopNumbers: Record<string, number> = {}
+  // The home airport can be a continent away from the trip itself. Leave pins that far from
+  // everything else off the map, so it stays zoomed on where the group actually goes.
+  const located = (itinerary?.days ?? []).flatMap((d) => d.items).filter((it) => it.lat != null && it.lng != null)
+  const onSite = located.filter((it) => it.category !== "TRAVEL")
+  const focus =
+    onSite.length > 0
+      ? {
+          lat: [...onSite].map((it) => it.lat as number).sort((a, b) => a - b)[Math.floor(onSite.length / 2)],
+          lng: [...onSite].map((it) => it.lng as number).sort((a, b) => a - b)[Math.floor(onSite.length / 2)],
+        }
+      : null
+  const nearTrip = (it: { lat: number | null; lng: number | null; category: string }) =>
+    !focus || it.category !== "TRAVEL" || haversineKm({ lat: it.lat as number, lng: it.lng as number }, focus) <= 250
   for (const day of itinerary?.days ?? []) {
     for (const it of day.items) {
-      if (it.lat != null && it.lng != null) {
+      if (it.lat != null && it.lng != null && nearTrip(it)) {
         const n = stops.length + 1
         stops.push({
           n,

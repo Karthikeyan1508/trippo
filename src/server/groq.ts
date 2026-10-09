@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { ResearchBundle } from "@/server/serpapi"
+import type { RoutePlan } from "@/server/route-planner"
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -23,6 +24,8 @@ export type GeneratedItem = {
   category: ItemCategory
   placeName?: string
   why?: string
+  /** Coordinates and source for the place, when the route planner already knows them. */
+  geo?: { lat: number; lng: number; address?: string; rating?: number; engine?: string; url?: string }
 }
 
 export type GeneratedDay = {
@@ -61,6 +64,8 @@ export type ItineraryContext = {
   /** The stay the group already picked, if any, the plan should be built around it. */
   chosenStay?: { name: string; price?: string | null } | null
   research: ResearchBundle
+  /** The optimised route (bases, flights, daily windows and stops). When present, the model only writes around it. */
+  route?: RoutePlan | null
 }
 
 export function hasGroq() {
@@ -82,6 +87,117 @@ Rules:
 - If chosenStay is provided, the group has already picked it: use it as the STAY item (placeName = its exact name) and keep each day's route sensible around it.
 - Use 24h times like "09:30". Keep descriptions concise.
 - Produce exactly the requested number of days.`
+
+const ROUTED_PROMPT = `You are an expert group-travel planner finishing a day-by-day itinerary whose ROUTE is already decided.
+A route planner has fixed where the group sleeps, how they travel (flights, airport and base-to-base transfers) and which places to visit each day, in an order that avoids backtracking. You write the days around that.
+
+Hard rules:
+- For each day output ONLY free-time items: activities, meals, a cafe or rest. Do NOT output flights, airport transfers or transfers between bases: they appear under "fixed" and are added for you.
+- Activities: use ONLY the places under that day's "stops", in exactly the order given, with the exact name in "placeName". You may skip a stop if the day gets too full. Never add other places and never reorder.
+- Meals (breakfast, lunch, dinner) wherever the day's window allows. Use a name from "restaurants" in "placeName" when it fits; otherwise leave placeName empty and name the area in the title.
+- Every item must start inside the day's window (24h "HH:MM"), after any fixed item that precedes it, and must not overlap one. Leave realistic gaps for travel: "kmFromPrev" is the road distance from the previous stop (assume 40 km/h).
+- Respect the group's pace: if relaxed, do not fill every slot. Respect diet, interests and accessibility needs.
+- Give every item a one-sentence "why" that ties it to the group or the place.
+- Return exactly one day per entry in route.days, with the same dayNumber, and a one-sentence day "summary".
+- Never use the em dash character.`
+
+const BASES_TOOL = {
+  type: "function",
+  function: {
+    name: "propose_bases",
+    description: "Return the overnight bases for the trip.",
+    parameters: {
+      type: "object",
+      properties: {
+        bases: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "A town or area that can be looked up on a map, with the country, e.g. 'Kandy, Sri Lanka'." },
+              nights: { type: "integer" },
+              why: { type: "string" },
+            },
+            required: ["name", "nights"],
+          },
+        },
+      },
+      required: ["bases"],
+    },
+  },
+}
+
+/**
+ * Asks the model which towns to sleep in. Only the choice of towns is the
+ * model's: distances, ordering and feasibility are checked in code afterwards.
+ */
+export async function proposeBasesWithGroq(input: {
+  destination: string
+  gatewayLabel: string
+  arrival: "flight" | "road" | "none"
+  days: number
+  nights: number
+  maxBases: number
+  maxLegMinutes: number
+  radiusKm: number
+  pace: string
+  interests: string[]
+  mustCover: string[]
+}): Promise<{ name: string; nights: number; why?: string }[] | null> {
+  if (!hasGroq()) return null
+  const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b"
+  const system = `You choose where a group sleeps on a short trip so the route is compact and easy.
+Rules:
+- The trip starts and ends at "${input.gatewayLabel}" (${input.arrival === "flight" ? "the arrival airport city" : "the starting point"}), so the route is a loop. Never make the group backtrack along the same road more than once.
+- Every base must be inside "${input.destination}" itself, within about ${input.radiusKm} km of its centre. Never choose a stopover or a neighbouring town outside it: the group chose this destination.
+- Use at most ${input.maxBases} base${input.maxBases === 1 ? "" : "s"}. Total nights across bases must equal ${input.nights}; every base gets at least one night.
+- No single leg (the gateway to the first base, base to base, last base back to the gateway) may take longer than ${Math.round(input.maxLegMinutes / 60 * 10) / 10} hours by road.
+- A base should have plenty to see within about 30 km of it, so the group does not need long drives on non-travel days.
+- Short trips (3 days or fewer) should stay in ONE base, ideally the gateway city or right next to it. Do not pick far-flung places a short trip cannot reach comfortably.
+- Name each base as a well-known town plus country so it can be found on a map.
+- Never use the em dash character.`
+  const user = `Destination: ${input.destination}. Trip length: ${input.days} days (${input.nights} nights). Pace: ${input.pace}. Interests: ${input.interests.join(", ") || "general sightseeing"}. Must cover: ${input.mustCover.join("; ") || "nothing specific"}.`
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        max_tokens: 4000,
+        ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        tools: [BASES_TOOL],
+        tool_choice: { type: "function", function: { name: "propose_bases" } },
+      }),
+      cache: "no-store",
+    })
+    if (!res.ok) {
+      console.error("Groq bases error:", res.status, await res.text())
+      return null
+    }
+    const json = await res.json()
+    const args = JSON.parse(json?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments ?? "null")
+    const list = Array.isArray(args?.bases) ? args.bases : []
+    return list
+      .filter((b: any) => b && typeof b.name === "string" && b.name.trim())
+      .map((b: any) => ({
+        name: String(b.name).trim(),
+        nights: Math.max(1, Math.round(Number(b.nights) || 1)),
+        why: typeof b.why === "string" ? b.why : undefined,
+      }))
+  } catch (err) {
+    console.error("Groq bases request failed:", err)
+    return null
+  }
+}
 
 const TOOL = {
   type: "function",
@@ -172,6 +288,28 @@ export async function generateItineraryWithGroq(
   if (!hasGroq()) return null
   const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b"
 
+  const routed = ctx.route && ctx.route.days.length > 0 ? ctx.route : null
+  const routedPayload = routed
+    ? {
+        headline: routed.headline,
+        days: routed.days.map((d) => ({
+          dayNumber: d.day,
+          date: d.date,
+          base: d.base,
+          window: d.window,
+          maxStops: d.maxStops,
+          fixed: d.fixed.map((f) => ({ time: f.startTime, title: f.title })),
+          stops: d.candidates.map((c) => ({
+            placeName: c.title,
+            rating: c.rating ?? null,
+            category: c.category ?? null,
+            kmFromPrev: c.kmFromPrev,
+          })),
+          restaurants: d.restaurants.map((r) => r.title),
+        })),
+      }
+    : null
+
   const body: Record<string, unknown> = {
     model,
     temperature: 0.5,
@@ -180,8 +318,23 @@ export async function generateItineraryWithGroq(
     max_tokens: 16000,
     ...(model.includes("gpt-oss") ? { reasoning_effort: "medium" } : {}),
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
+      { role: "system", content: routed ? ROUTED_PROMPT : SYSTEM_PROMPT },
+      routed
+        ? {
+            role: "user",
+            content: `Write the free-time items for this ${ctx.days}-day ${ctx.tripType.toLowerCase()} trip to ${ctx.destination}.\n\nGroup and route (JSON):\n${JSON.stringify(
+              {
+                group: ctx.group,
+                chosenStay: ctx.chosenStay ?? null,
+                budgetPerPerson: ctx.budgetPerPerson,
+                currency: ctx.currency,
+                route: routedPayload,
+              },
+              null,
+              0
+            )}`,
+          }
+        : {
         role: "user",
         content: `Plan a ${ctx.days}-day ${ctx.tripType.toLowerCase()} trip to ${ctx.destination}${
           ctx.originCity ? ` from ${ctx.originCity}` : ""
@@ -202,28 +355,52 @@ export async function generateItineraryWithGroq(
     tool_choice: { type: "function", function: { name: "generate_itinerary" } },
   }
 
-  try {
-    const res = await fetch(GROQ_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-    })
-    if (!res.ok) {
-      console.error("Groq error:", res.status, await res.text())
-      return null
+  // The model occasionally answers with the days as plain JSON instead of calling the
+  // tool, which the API rejects but echoes back in `failed_generation`. That text is a
+  // perfectly good plan, so use it; otherwise try once more.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(GROQ_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        console.error("Groq error:", res.status, text.slice(0, 300))
+        const recovered = recoverFailedGeneration(text)
+        if (recovered) return recovered
+        continue
+      }
+      const json = await res.json()
+      const call = json?.choices?.[0]?.message?.tool_calls?.[0]
+      if (!call?.function?.arguments) continue
+      const parsed = normalize(JSON.parse(call.function.arguments))
+      if (parsed) return parsed
+    } catch (err) {
+      console.error("Groq request failed:", err)
     }
-    const json = await res.json()
-    const call = json?.choices?.[0]?.message?.tool_calls?.[0]
-    if (!call?.function?.arguments) return null
-    return normalize(JSON.parse(call.function.arguments))
-  } catch (err) {
-    console.error("Groq request failed:", err)
-    return null
   }
+  return null
+}
+
+/** Pulls a plan out of a rejected tool call's `failed_generation` text, if it holds one. */
+function recoverFailedGeneration(responseText: string): GeneratedItinerary | null {
+  try {
+    const failed = JSON.parse(responseText)?.error?.failed_generation
+    if (typeof failed !== "string") return null
+    const payload = JSON.parse(failed)
+    if (Array.isArray(payload)) return normalize({ summary: "Your group itinerary.", days: payload })
+    if (payload && Array.isArray(payload.days)) return normalize(payload)
+    if (payload?.arguments && Array.isArray(payload.arguments.days)) return normalize(payload.arguments)
+  } catch {
+    /* not recoverable */
+  }
+  return null
 }
 
 // ── Pre-trip prep pack ──────────────────────────────────────────────────
