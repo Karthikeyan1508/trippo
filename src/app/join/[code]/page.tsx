@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { CalendarDays, LinkIcon, MapPin, Users } from "lucide-react"
@@ -24,6 +25,46 @@ function initials(name: string | null) {
     .slice(0, 2)
     .join("")
     .toUpperCase()
+}
+
+/** What shows when the link is shared: the title and text; the image comes from opengraph-image.tsx. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ code: string }>
+}): Promise<Metadata> {
+  const { code } = await params
+  const trip = await prisma.trip.findUnique({
+    where: { joinCode: code },
+    select: {
+      name: true,
+      destination: true,
+      startDate: true,
+      endDate: true,
+      status: true,
+      members: {
+        orderBy: { joinedAt: "asc" },
+        select: { role: true, user: { select: { name: true } } },
+      },
+    },
+  })
+  // Invite links are for the crew, not for search engines.
+  const robots = { index: false, follow: false }
+  if (!trip || trip.status === "ARCHIVED") {
+    return { title: "Trip invite — Trippo", robots }
+  }
+
+  const inviter = (trip.members.find((m) => m.role === "ADMIN") ?? trip.members[0])?.user.name
+  const who = inviter?.split(" ")[0] ?? "A friend"
+  const title = `${who} invited you to ${trip.name}`
+  const description = `${trip.destination} · ${formatDateRange(trip.startDate, trip.endDate)} · ${tripDurationDays(trip.startDate, trip.endDate)} days. Join the crew on Trippo to vote, plan and split costs together.`
+  return {
+    title,
+    description,
+    robots,
+    openGraph: { title, description, type: "website", siteName: "Trippo" },
+    twitter: { card: "summary_large_image", title, description },
+  }
 }
 
 /** Public landing page for an invite link: preview the trip, then join. */

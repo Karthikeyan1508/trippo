@@ -15,8 +15,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 })
 
+// Absolute base for share-preview image URLs (Open Graph needs full URLs).
+const siteUrl = process.env.AUTH_URL ?? process.env.RENDER_EXTERNAL_URL ?? "http://localhost:3000"
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   applicationName: "Trippo",
+  openGraph: { siteName: "Trippo", type: "website" },
+  twitter: { card: "summary_large_image" },
   icons: {
     icon: [{ url: "/icons/192.png", sizes: "192x192", type: "image/png" }],
     apple: [{ url: "/icons/apple-180.png", sizes: "180x180", type: "image/png" }],
