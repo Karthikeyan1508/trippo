@@ -38,7 +38,21 @@ const PALETTES = {
     highlight: "#2a5c00",
     wash: "bg-background/62",
   },
+  // The brand panel on the sign-in page: the same shader, turned up.
+  vivid: {
+    swirl: ["#7ed100", "#2f7d00"],
+    base: "#55b300",
+    up: "#86dc00",
+    down: "#3f9400",
+    left: "#62c200",
+    right: "#9be800",
+    intensity: 1.35,
+    highlight: "#e4ff9a",
+    wash: "bg-gradient-to-br from-black/40 via-black/10 to-transparent",
+  },
 } as const
+
+type PaletteName = keyof typeof PALETTES
 
 const subscribeNothing = () => () => {}
 
@@ -55,12 +69,7 @@ function subscribeDarkClass(onChange: () => void) {
   return () => observer.disconnect()
 }
 
-export function ShaderBackground() {
-  const dark = React.useSyncExternalStore(
-    subscribeDarkClass,
-    () => document.documentElement.classList.contains("dark"),
-    () => false
-  )
+function GlassShader({ name, className }: { name: PaletteName; className?: string }) {
   // Wait for the client so the first paint matches the server (no theme yet).
   const mounted = React.useSyncExternalStore(subscribeNothing, () => true, () => false)
   const reduceMotion = React.useSyncExternalStore(
@@ -70,10 +79,10 @@ export function ShaderBackground() {
   )
   const [unavailable, setUnavailable] = React.useState(false)
 
-  const palette = PALETTES[dark ? "dark" : "light"]
+  const palette = PALETTES[name]
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 print:hidden">
+    <div aria-hidden className={`pointer-events-none overflow-hidden ${className ?? ""}`}>
       {/* The fallback, and what shows for a moment while the shader starts. */}
       <div
         className="absolute inset-0"
@@ -124,4 +133,19 @@ export function ShaderBackground() {
       <div className={`absolute inset-0 ${palette.wash}`} />
     </div>
   )
+}
+
+/** The glass backdrop behind the whole app; follows the light/dark theme. */
+export function ShaderBackground() {
+  const dark = React.useSyncExternalStore(
+    subscribeDarkClass,
+    () => document.documentElement.classList.contains("dark"),
+    () => false
+  )
+  return <GlassShader name={dark ? "dark" : "light"} className="fixed inset-0 -z-10 print:hidden" />
+}
+
+/** The same shader, vivid, filling its (relatively positioned) parent. */
+export function BrandShader({ className }: { className?: string }) {
+  return <GlassShader name="vivid" className={`absolute inset-0 ${className ?? ""}`} />
 }

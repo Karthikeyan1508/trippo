@@ -5,6 +5,7 @@ import { Compass, ShieldCheck } from "lucide-react"
 import { auth } from "@/auth"
 import { signInWithGoogle, devSignIn } from "@/server/auth-actions"
 import { safeRedirectPath } from "@/lib/redirect"
+import { BrandShader } from "@/components/shader-background"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -48,18 +49,11 @@ export default async function LoginPage({
   return (
     <div className="grid min-h-svh lg:h-svh lg:grid-cols-[1.1fr_1fr] lg:overflow-hidden">
       {/* Brand: the name and one line, nothing else. */}
-      <div className="relative hidden h-svh flex-col justify-between overflow-hidden bg-[oklch(0.19_0.03_135)] p-12 text-white lg:flex xl:p-16">
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            backgroundImage:
-              "radial-gradient(60% 50% at 100% 100%, oklch(0.86 0.25 130 / 0.5), transparent 70%), radial-gradient(40% 35% at 0% 0%, oklch(0.86 0.25 130 / 0.16), transparent 70%), repeating-radial-gradient(circle at 100% 100%, transparent 0 26px, oklch(1 0 0 / 0.045) 26px 27px)",
-          }}
-        />
+      <div className="relative hidden h-svh flex-col justify-between overflow-hidden bg-[oklch(0.3_0.1_135)] p-12 text-white lg:flex xl:p-16">
+        <BrandShader />
 
         <Link href="/" className="relative flex items-center gap-3">
-          <span className="grid size-11 place-items-center bg-primary text-primary-foreground">
+          <span className="grid size-11 place-items-center bg-white text-neutral-900">
             <Compass className="size-6" />
           </span>
           <span className="text-2xl font-semibold tracking-tight">Trippo</span>
@@ -68,14 +62,16 @@ export default async function LoginPage({
         <h2 className="relative text-6xl leading-[1.02] font-bold tracking-tight xl:text-7xl 2xl:text-8xl">
           Less group chat.
           <br />
-          <span className="text-primary">More trip.</span>
+          <span className="mt-3 inline-block bg-primary px-4 pb-1 text-primary-foreground">
+            More trip.
+          </span>
         </h2>
 
         <span aria-hidden />
       </div>
 
       {/* Sign-in */}
-      <div className="relative flex flex-col p-6 md:p-12">
+      <div className="relative flex flex-col bg-background/70 p-6 backdrop-blur-2xl md:p-12">
         <div className="lg:hidden">
           <Link href="/" className="flex items-center gap-2.5">
             <span className="grid size-9 place-items-center bg-primary text-primary-foreground">
