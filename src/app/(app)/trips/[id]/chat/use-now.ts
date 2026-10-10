@@ -16,3 +16,18 @@ export function useNow(intervalMs = 30_000) {
   }, [intervalMs])
   return now
 }
+
+const TOUCH_QUERY = "(hover: none)"
+
+/** True on phones and tablets, where nothing can be hovered: actions must be reachable by touch. */
+export function useTouch() {
+  return React.useSyncExternalStore(
+    (onChange) => {
+      const mql = window.matchMedia(TOUCH_QUERY)
+      mql.addEventListener("change", onChange)
+      return () => mql.removeEventListener("change", onChange)
+    },
+    () => window.matchMedia(TOUCH_QUERY).matches,
+    () => false
+  )
+}

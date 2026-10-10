@@ -51,7 +51,7 @@ export default async function PrintPage({
 
   return (
     <div
-      className="mx-auto max-w-3xl bg-white px-8 py-10 text-neutral-900 print:px-0 print:py-0"
+      className="mx-auto max-w-3xl bg-white px-8 py-10 text-neutral-900 print:max-w-none print:p-0"
       // A printed page is always light: pin the accent tokens to their light-mode
       // values so a dark-mode viewer still gets a legible PDF.
       style={
@@ -63,13 +63,30 @@ export default async function PrintPage({
       }
     >
       <style>{`
-        @page { size: A4; margin: 1.6cm 1.5cm 1.2cm; }
+        /* Zero page margin removes the browser's own header and footer (date, URL, page number).
+           The spacer rows of the table below put the margin back on every page. */
+        @page { size: A4; margin: 0; }
         html, body { background: #fff; }
         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        @media print { html { zoom: .88; } }
+        @media print { html { font-size: 14px; } thead { display: table-header-group; } tfoot { display: table-footer-group; } }
       `}</style>
 
       <PrintControls />
+
+      <table className="w-full border-collapse">
+        <thead>
+          <tr>
+            <td className="hidden h-[14mm] p-0 print:table-cell" />
+          </tr>
+        </thead>
+        <tfoot>
+          <tr>
+            <td className="hidden h-[14mm] p-0 print:table-cell" />
+          </tr>
+        </tfoot>
+        <tbody>
+          <tr>
+            <td className="p-0 align-top print:px-[15mm]">
 
       {/* Cover */}
       <header className="border-b border-neutral-300 pb-5">
@@ -102,8 +119,8 @@ export default async function PrintPage({
 
           <div className="mt-5 space-y-6">
             {itinerary.days.map((day) => (
-              <div key={day.id} className="break-inside-avoid border-t border-neutral-200 pt-5 first:border-t-0 first:pt-0">
-                <div className="flex items-baseline gap-2.5">
+              <div key={day.id} className="border-t border-neutral-200 pt-5 first:border-t-0 first:pt-0">
+                <div className="flex items-baseline gap-2.5 break-after-avoid">
                   <span className="rounded bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
                     Day {day.dayNumber}
                   </span>
@@ -119,7 +136,7 @@ export default async function PrintPage({
 
                 <ul className="mt-2.5 ml-1 space-y-3 border-l border-neutral-200 pl-4">
                   {day.items.map((item) => (
-                    <li key={item.id} className="relative">
+                    <li key={item.id} className="relative break-inside-avoid">
                       <span className="absolute top-1.5 -left-[21px] size-2 rounded-full bg-brand ring-2 ring-white" />
                       <div className="flex gap-3">
                         <span className="w-11 shrink-0 pt-px text-xs tabular-nums text-neutral-500">
@@ -161,12 +178,12 @@ export default async function PrintPage({
 
       {/* Before you go */}
       {prep && (
-        <section className="mt-10 break-inside-avoid">
-          <h2 className="text-xl font-bold tracking-tight">Before you go</h2>
+        <section className="mt-10">
+          <h2 className="text-xl font-bold tracking-tight break-after-avoid">Before you go</h2>
 
-          <div className="mt-4 grid gap-6 sm:grid-cols-2">
+          <div className="mt-4 grid gap-6 sm:grid-cols-2 print:grid-cols-2">
             {etiquette.length > 0 && (
-              <div>
+              <div className="break-inside-avoid">
                 <h3 className="text-sm font-semibold text-brand">
                   Etiquette &amp; tips
                 </h3>
@@ -183,7 +200,7 @@ export default async function PrintPage({
 
             <div className="space-y-5">
               {documents.length > 0 && (
-                <div>
+                <div className="break-inside-avoid">
                   <h3 className="text-sm font-semibold text-brand">
                     Documents to carry
                   </h3>
@@ -199,7 +216,7 @@ export default async function PrintPage({
               )}
 
               {phrases.length > 0 && (
-                <div>
+                <div className="break-inside-avoid">
                   <h3 className="text-sm font-semibold text-brand">
                     Handy phrases
                   </h3>
@@ -217,9 +234,9 @@ export default async function PrintPage({
           </div>
 
           {packing.length > 0 && (
-            <div className="mt-6 break-inside-avoid">
-              <h3 className="text-sm font-semibold text-brand">Packing list</h3>
-              <div className="mt-2 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-brand break-after-avoid">Packing list</h3>
+              <div className="mt-2 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3">
                 {packing.map((cat, i) => (
                   <div key={i} className="break-inside-avoid">
                     <p className="text-sm font-medium">{cat.category}</p>
@@ -245,9 +262,13 @@ export default async function PrintPage({
         </p>
       )}
 
-      <footer className="mt-12 border-t border-neutral-200 pt-4 text-center text-xs text-neutral-400">
+      <footer className="mt-12 break-inside-avoid border-t border-neutral-200 pt-4 text-center text-xs text-neutral-400">
         Generated with Trippo · {format(new Date(), "d MMM yyyy")}
       </footer>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   )
 }

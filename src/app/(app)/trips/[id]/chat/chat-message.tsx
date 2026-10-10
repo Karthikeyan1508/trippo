@@ -28,6 +28,7 @@ import { useChat } from "./chat-context"
 import { PersonAvatar, TrippoAvatar } from "./chat-people"
 import { PollMessage } from "./chat-poll"
 import { RichText } from "./rich-text"
+import { useTouch } from "./use-now"
 
 const clock = (iso: string) => format(new Date(iso), "h:mm a")
 
@@ -55,6 +56,45 @@ function TextBubble({ message, grouped }: { message: ChatMessageDTO; grouped: bo
   const sending = message.status === "sending"
   const failed = message.status === "error"
   const canDelete = !sending && !failed && (own || viewer.role === "ADMIN")
+  const touch = useTouch()
+  const [open, setOpen] = React.useState(false)
+  const [drag, setDrag] = React.useState(0)
+  const start = React.useRef<{ x: number; y: number; moving: boolean } | null>(null)
+
+  // Touch: swipe a message sideways to reply (like every chat app), or tap it for Reply and Delete.
+  const touchHandlers = touch && !sending && !failed
+    ? {
+        onTouchStart: (e: React.TouchEvent) => {
+          start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, moving: false }
+        },
+        onTouchMove: (e: React.TouchEvent) => {
+          const s = start.current
+          if (!s) return
+          const dx = e.touches[0].clientX - s.x
+          const dy = e.touches[0].clientY - s.y
+          if (!s.moving && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5) s.moving = true
+          if (s.moving) setDrag(Math.max(-72, Math.min(72, dx)))
+        },
+        onTouchEnd: () => {
+          const s = start.current
+          start.current = null
+          if (s?.moving && Math.abs(drag) >= 56) {
+            navigator.vibrate?.(8)
+            reply(message)
+          }
+          setDrag(0)
+        },
+        onTouchCancel: () => {
+          start.current = null
+          setDrag(0)
+        },
+        onClick: (e: React.MouseEvent) => {
+          // A link or button inside the message keeps its own tap.
+          if ((e.target as HTMLElement).closest("a, button")) return
+          setOpen((v) => !v)
+        },
+      }
+    : {}
 
   return (
     <div className={cn("group flex gap-2.5", own ? "flex-row-reverse" : "flex-row")}>
@@ -69,9 +109,21 @@ function TextBubble({ message, grouped }: { message: ChatMessageDTO; grouped: bo
           </p>
         )}
         <div className="relative">
+          {touch && drag !== 0 && (
+            <span
+              aria-hidden
+              className={cn("absolute top-1/2 grid size-7 -translate-y-1/2 place-items-center bg-primary text-primary-foreground", drag > 0 ? "-left-9" : "-right-9")}
+              style={{ opacity: Math.min(1, Math.abs(drag) / 56) }}
+            >
+              <CornerUpLeft className="size-3.5" />
+            </span>
+          )}
           <div
+            {...touchHandlers}
+            style={drag ? { transform: `translateX(${drag}px)` } : undefined}
             className={cn(
-              "border px-3 py-2",
+              "border px-3 py-2 transition-transform",
+              drag === 0 ? "duration-150" : "duration-0",
               own ? "border-primary/30 bg-primary/15" : "bg-card/80 backdrop-blur",
               sending && "opacity-60",
               failed && "border-destructive/50"
@@ -81,7 +133,7 @@ function TextBubble({ message, grouped }: { message: ChatMessageDTO; grouped: bo
             <RichText text={message.body} crewNames={crewNames} own={own} />
           </div>
 
-          {!sending && !failed && (
+          {!sending && !failed && !touch && (
             <div
               className={cn(
                 "absolute top-1/2 hidden -translate-y-1/2 items-center border bg-background/95 shadow-sm group-hover:flex group-focus-within:flex",
@@ -97,6 +149,22 @@ function TextBubble({ message, grouped }: { message: ChatMessageDTO; grouped: bo
             </div>
           )}
         </div>
+        {touch && open && !sending && !failed && (
+          <div className="mt-1.5 flex items-center border bg-background/95 shadow-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                reply(message)
+              }}
+              className="flex h-10 items-center gap-1.5 px-3 text-xs font-medium"
+            >
+              <CornerUpLeft className="size-4" />
+              Reply
+            </button>
+            {canDelete && <DeleteButton messageId={message.id} onDone={refresh} label="Delete" />}
+          </div>
+        )}
         {own && !sending && !failed && <p className="mt-0.5 text-[10px] text-muted-foreground">{clock(message.createdAt)}</p>}
         {sending && <p className="mt-0.5 text-[10px] text-muted-foreground">Sending...</p>}
         {failed && (
@@ -116,7 +184,7 @@ function TextBubble({ message, grouped }: { message: ChatMessageDTO; grouped: bo
   )
 }
 
-function DeleteButton({ messageId, onDone }: { messageId: string; onDone: () => Promise<void> }) {
+function DeleteButton({ messageId, onDone, label }: { messageId: string; onDone: () => Promise<void>; label?: string }) {
   const { tripId } = useChat()
   const [busy, setBusy] = React.useState(false)
   return (
@@ -130,11 +198,12 @@ function DeleteButton({ messageId, onDone }: { messageId: string; onDone: () => 
         await onDone()
         setBusy(false)
       }}
-      className="grid size-7 place-items-center text-muted-foreground hover:text-destructive"
+      className={label ? "flex h-10 items-center gap-1.5 border-l px-3 text-xs font-medium text-destructive" : "grid size-7 place-items-center text-muted-foreground hover:text-destructive"}
       aria-label="Delete message"
       title="Delete"
     >
-      <Trash2 className="size-3.5" />
+      <Trash2 className={label ? "size-4" : "size-3.5"} />
+      {label}
     </button>
   )
 }
@@ -172,7 +241,8 @@ function AiBubble({ message }: { message: ChatMessageDTO }) {
   const failed = message.status === "failed"
   const canRetry = failed && (payload?.askedById === viewer.id || viewer.role === "ADMIN")
   const [retrying, setRetrying] = React.useState(false)
-  const { tripId } = useChat()
+  const { tripId, reply } = useChat()
+  const touch = useTouch()
 
   return (
     <div className="flex gap-2.5">
@@ -182,6 +252,12 @@ function AiBubble({ message }: { message: ChatMessageDTO }) {
           <span className="font-medium">Trippo</span>
           <span className="bg-primary/20 px-1 py-px text-[9px] font-semibold tracking-wider text-brand uppercase">AI</span>
           <span className="text-[10px] text-muted-foreground">{clock(message.createdAt)}</span>
+          {touch && !thinking && (
+            <button type="button" onClick={() => reply(message)} className="ml-auto inline-flex h-8 items-center gap-1 px-2 text-[11px] text-muted-foreground" aria-label="Reply to Trippo">
+              <CornerUpLeft className="size-3.5" />
+              Reply
+            </button>
+          )}
         </p>
 
         <div className="max-w-2xl border border-l-2 border-l-primary bg-card/80 px-3 py-2.5 backdrop-blur">
