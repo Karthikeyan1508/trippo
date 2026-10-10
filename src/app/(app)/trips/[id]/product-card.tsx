@@ -97,7 +97,7 @@ export function ProductCard({
         />
         {product.discountPct != null && product.discountPct >= 5 && (
           <span className="absolute top-0 left-0 bg-primary px-2.5 py-1 text-[11px] font-semibold tracking-wide text-primary-foreground">
-            −{product.discountPct}%
+            -{product.discountPct}%
           </span>
         )}
       </div>

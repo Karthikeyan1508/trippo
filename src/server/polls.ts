@@ -1,21 +1,29 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
-
 import { prisma } from "@/lib/prisma"
 import { membershipFor } from "@/lib/access"
 import { notify, personName } from "@/server/notify"
 import { tripUrl } from "@/lib/notifications"
+import { awayFrom, postPollResult } from "@/server/chat-core"
 
 type Result = { ok: true } | { ok: false; error: string }
 
 const MAX_OPTIONS = 8
 
-/** Any voting member can raise a question for the group. */
+/** Wakes the poll's chat message, so everyone's next refresh shows the new counts. */
+function touchMessage(pollId: string) {
+  return prisma.chatMessage.updateMany({ where: { pollId }, data: { updatedAt: new Date() } })
+}
+
+/**
+ * Any voting member can put a question to the group. The poll lives in the crew chat:
+ * it is posted there as a message, and everyone else is told about it.
+ */
 export async function createPoll(
   tripId: string,
   question: string,
-  options: string[]
+  options: string[],
+  closesInMinutes?: number | null
 ): Promise<Result> {
   const { user, member } = await membershipFor(tripId)
   if (!member) return { ok: false, error: "You're not a member of this trip." }
@@ -30,6 +38,7 @@ export async function createPoll(
   if (cleanQuestion.length < 3 || cleanOptions.length < 2) {
     return { ok: false, error: "Add a question and at least two different choices." }
   }
+  const minutes = closesInMinutes && closesInMinutes > 0 ? Math.min(closesInMinutes, 60 * 24 * 14) : null
 
   await prisma.poll.create({
     data: {
@@ -37,18 +46,24 @@ export async function createPoll(
       question: cleanQuestion,
       options: cleanOptions,
       createdById: user.id,
+      closesAt: minutes ? new Date(Date.now() + minutes * 60_000) : null,
+      chatMessage: { create: { tripId, authorId: user.id, kind: "POLL", body: cleanQuestion } },
     },
+  })
+
+  const voters = await prisma.tripMember.findMany({
+    where: { tripId, role: { not: "OBSERVER" }, NOT: { userId: user.id } },
+    select: { userId: true },
   })
   await notify({
     tripId,
     actorId: user.id,
-    to: "voters",
+    to: { users: await awayFrom(tripId, voters.map((v) => v.userId)) },
     type: "poll_created",
-    title: `${personName(user)} opened a decision`,
+    title: `${personName(user)} started a poll`,
     body: cleanQuestion,
-    url: tripUrl(tripId, "decisions"),
+    url: tripUrl(tripId, "chat"),
   })
-  revalidatePath(`/trips/${tripId}`)
   return { ok: true }
 }
 
@@ -72,7 +87,7 @@ export async function castVote(pollId: string, option: string): Promise<Result> 
     create: { pollId, userId: user.id, option },
     update: { option },
   })
-  revalidatePath(`/trips/${poll.tripId}`)
+  await touchMessage(pollId)
   return { ok: true }
 }
 
@@ -97,11 +112,22 @@ export async function setPollClosed(
 ): Promise<Result> {
   const ctx = await managePollContext(pollId)
   if (!ctx.ok) return ctx
-  await prisma.poll.update({
+
+  if (!closed) {
+    await prisma.poll.update({ where: { id: pollId }, data: { closesAt: null, announcedAt: null } })
+    await touchMessage(pollId)
+    return { ok: true }
+  }
+
+  const now = new Date()
+  const updated = await prisma.poll.update({
     where: { id: pollId },
-    data: { closesAt: closed ? new Date() : null },
+    data: { closesAt: now, announcedAt: now },
+    include: { votes: { select: { option: true } } },
   })
-  revalidatePath(`/trips/${ctx.poll.tripId}`)
+  // Closing by hand announces the result straight away; a deadline is announced when someone next looks.
+  if (!ctx.poll.announcedAt) await postPollResult(ctx.poll.tripId, updated)
+  await touchMessage(pollId)
   return { ok: true }
 }
 
@@ -109,6 +135,5 @@ export async function deletePoll(pollId: string): Promise<Result> {
   const ctx = await managePollContext(pollId)
   if (!ctx.ok) return ctx
   await prisma.poll.delete({ where: { id: pollId } })
-  revalidatePath(`/trips/${ctx.poll.tripId}`)
   return { ok: true }
 }

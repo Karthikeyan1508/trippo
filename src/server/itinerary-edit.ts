@@ -1,12 +1,9 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
 
 import { prisma } from "@/lib/prisma"
 import { adminContext } from "@/lib/access"
-import { syncPlanState } from "@/lib/plan-state"
-import { notify } from "@/server/notify"
-import { tripUrl } from "@/lib/notifications"
+import { afterPlanChange } from "@/server/plan-changes"
 
 type ItemCategoryT =
   | "TRAVEL"
@@ -65,31 +62,14 @@ async function editableItem(itemId: string) {
   } as const
 }
 
-/**
- * Any change to the plan invalidates the group's votes: nobody should stay
- * "approved" on a plan that changed under them.
- */
+/** Any change to the plan invalidates the group's votes (see afterPlanChange). */
 async function afterEdit(
   tripId: string,
   itineraryId: string,
   actor: { id: string; name?: string | null; email?: string | null }
 ): Promise<Result> {
-  const cleared = await prisma.approval.deleteMany({ where: { itineraryId } })
-  await syncPlanState(tripId)
-  if (cleared.count > 0) {
-    const trip = await prisma.trip.findUnique({ where: { id: tripId }, select: { name: true } })
-    await notify({
-      tripId,
-      actorId: actor.id,
-      to: "voters",
-      type: "plan_changed",
-      title: "The plan changed. Please vote again",
-      body: trip?.name,
-      url: tripUrl(tripId, "itinerary"),
-    })
-  }
-  revalidatePath(`/trips/${tripId}`)
-  return { ok: true, votesReset: cleared.count > 0 }
+  const { votesReset } = await afterPlanChange(tripId, itineraryId, actor)
+  return { ok: true, votesReset }
 }
 
 function cleanTime(value?: string) {

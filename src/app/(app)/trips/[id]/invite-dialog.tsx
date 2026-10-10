@@ -51,12 +51,15 @@ export function InviteDialog({
   joinCode,
   isAdmin,
   trigger,
+  compact = false,
 }: {
   tripId: string
   tripName: string
   joinCode: string
   isAdmin: boolean
   trigger?: React.ReactNode
+  /** Icon only on phones, where the top bar is short of room. */
+  compact?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
   const [pending, startTransition] = React.useTransition()
@@ -127,9 +130,9 @@ export function InviteDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger ?? (
-          <Button size="sm" className="gap-1.5">
+          <Button size="sm" className="gap-1.5" aria-label="Invite">
             <UserPlus className="size-4" />
-            Invite
+            <span className={compact ? "hidden sm:inline" : undefined}>Invite</span>
           </Button>
         )}
       </DialogTrigger>

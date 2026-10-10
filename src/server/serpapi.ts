@@ -2,6 +2,9 @@
 import { addDays } from "date-fns"
 
 import { prisma } from "@/lib/prisma"
+import { haversineKm } from "@/lib/geo"
+import { safeHttpUrl } from "@/lib/safe-url"
+import type { HotelItem } from "@/lib/chat"
 
 const SERP_BASE = "https://serpapi.com/search.json"
 const CACHE_TTL_DAYS = 7
@@ -39,16 +42,6 @@ export type EventLite = {
   address?: string
   venue?: string
   link?: string
-}
-
-export type TransportLite = {
-  name: string
-  mode?: string
-  price?: string
-  rating?: number
-  phone?: string
-  link?: string
-  address?: string
 }
 
 export type ResearchBundle = {
@@ -193,29 +186,6 @@ export async function fetchHotels(
     amenities: Array.isArray(p.amenities) ? p.amenities.slice(0, 5) : undefined,
     link: p.link,
     thumbnail: p.images?.[0]?.thumbnail,
-  }))
-}
-
-/** Three local, bookable transport options for a particular leg. Cached per trip. */
-export async function fetchLocalTransport(
-  tripId: string,
-  from: string,
-  to: string
-): Promise<TransportLite[]> {
-  const json = await serpFetch(tripId, "google_local", {
-    q: `transport service ${from} to ${to}`,
-    hl: "en",
-    gl: "in",
-  })
-  const local: any[] = json?.local_results ?? []
-  return local.slice(0, 3).map((r) => ({
-    name: r.title ?? r.name ?? "Local transport service",
-    mode: r.type ?? r.category,
-    price: r.price,
-    rating: num(r.rating),
-    phone: r.phone,
-    link: r.website ?? r.links?.website ?? r.link ?? r.directions,
-    address: r.address,
   }))
 }
 
@@ -486,4 +456,274 @@ export async function fetchFlightOptions(
     })
   }
   return { options, link }
+}
+
+
+// ── Crew chat tools: hotels near an area, places, directions, web search ─
+
+export type RawHotel = Omit<HotelItem, "key" | "why" | "badge">
+
+/** Google serves tiny thumbnails; the same image at card size looks far better. */
+function enlarge(url?: string): string | undefined {
+  if (!url) return undefined
+  return url.replace(/=s\d+-w\d+-h\d+-n-k-no-v1$/, "=w574-h384-k-no")
+}
+
+/** Hotels around a place, with prices for the dates, and how far each is from that place. */
+export async function searchHotelsNear(
+  tripId: string,
+  input: {
+    near: string
+    checkIn: string
+    checkOut: string
+    adults: number
+    currency: string
+    sort?: "rating" | "price" | "reviews"
+    minRating?: number
+    maxPrice?: number
+  }
+): Promise<{ hotels: RawHotel[]; center: GeoPoint | null }> {
+  const [json, center] = await Promise.all([
+    serpFetch(
+      tripId,
+      "google_hotels",
+      {
+        q: `Hotels near ${input.near}`,
+        check_in_date: input.checkIn,
+        check_out_date: input.checkOut,
+        adults: Math.max(1, Math.min(input.adults, 8)),
+        currency: input.currency,
+        hl: "en",
+        gl: "in",
+        sort_by: input.sort === "price" ? 3 : input.sort === "reviews" ? 13 : input.sort === "rating" ? 8 : undefined,
+        rating: input.minRating ? (input.minRating >= 4.5 ? 9 : input.minRating >= 4 ? 8 : 7) : undefined,
+        max_price: input.maxPrice,
+      },
+      3
+    ),
+    geocodePlace(tripId, input.near),
+  ])
+
+  const props: any[] = json?.properties ?? []
+  const hotels = props
+    .filter((p) => p?.name && (p.type === undefined || p.type === "hotel" || p.type === "vacation rental"))
+    .map((p): RawHotel => {
+      const lat = num(p.gps_coordinates?.latitude)
+      const lng = num(p.gps_coordinates?.longitude)
+      return {
+        name: String(p.name),
+        rating: num(p.overall_rating),
+        reviews: num(p.reviews),
+        priceNight: p.rate_per_night?.lowest,
+        priceValue: num(p.rate_per_night?.extracted_lowest),
+        priceTotal: p.total_rate?.lowest,
+        stars: num(p.extracted_hotel_class),
+        amenities: Array.isArray(p.amenities) ? p.amenities.slice(0, 6).map(String) : [],
+        image: enlarge(p.images?.[0]?.thumbnail),
+        link:
+          safeHttpUrl(p.link) ??
+          `https://www.google.com/travel/hotels?q=${encodeURIComponent(`${p.name} ${input.near}`)}`,
+        lat,
+        lng,
+        distanceKm:
+          center && lat !== undefined && lng !== undefined
+            ? Math.round(haversineKm(center, { lat, lng }) * 10) / 10
+            : undefined,
+        nearby: Array.isArray(p.nearby_places)
+          ? p.nearby_places
+              .slice(0, 3)
+              .map((n: any) => {
+                const t = n?.transportations?.[0]
+                return n?.name ? `${n.name}${t ? `: ${t.duration} by ${String(t.type).toLowerCase()}` : ""}` : null
+              })
+              .filter((x: string | null): x is string => Boolean(x))
+          : [],
+        checkIn: p.check_in_time,
+        checkOut: p.check_out_time,
+      }
+    })
+  return { hotels, center }
+}
+
+export type RawPlace = {
+  name: string
+  category?: string
+  rating?: number
+  reviews?: number
+  price?: string
+  address?: string
+  image?: string
+  link?: string
+  lat?: number
+  lng?: number
+  hours?: string
+  distanceKm?: number
+}
+
+/** Things to do, eat or see around a place. */
+export async function searchPlacesNear(
+  tripId: string,
+  query: string,
+  near: string
+): Promise<{ places: RawPlace[]; center: GeoPoint | null }> {
+  const [json, center] = await Promise.all([
+    serpFetch(tripId, "google_maps", { q: `${query} near ${near}`, type: "search", hl: "en" }, 5),
+    geocodePlace(tripId, near),
+  ])
+  const results: any[] = json?.local_results ?? (json?.place_results ? [json.place_results] : [])
+  const places = results.slice(0, 10).map((r): RawPlace => {
+    const lat = num(r.gps_coordinates?.latitude)
+    const lng = num(r.gps_coordinates?.longitude)
+    return {
+      name: String(r.title ?? r.name ?? "Place"),
+      category: r.type ?? (Array.isArray(r.types) ? r.types[0] : undefined),
+      rating: num(r.rating),
+      reviews: num(r.reviews),
+      price: r.price,
+      address: r.address,
+      image: enlarge(r.thumbnail),
+      link:
+        safeHttpUrl(r.website) ??
+        safeHttpUrl(r.links?.website) ??
+        `https://www.google.com/maps/search/${encodeURIComponent(`${r.title ?? query} ${near}`)}`,
+      lat,
+      lng,
+      hours: typeof r.hours === "string" ? r.hours : typeof r.open_state === "string" ? r.open_state : undefined,
+      distanceKm:
+        center && lat !== undefined && lng !== undefined
+          ? Math.round(haversineKm(center, { lat, lng }) * 10) / 10
+          : undefined,
+    }
+  })
+  return { places, center }
+}
+
+export type DirectionsLeg = {
+  mode: string
+  title: string
+  durationMin: number
+  operator?: string
+  fromStop?: string
+  toStop?: string
+  departs?: string
+  arrives?: string
+  stops?: number
+  /** True for rail legs, false for buses and everything else. */
+  rail: boolean
+}
+
+export type DirectionsOption = {
+  /** SerpApi's own label: "Driving", "Transit", "Two-wheeler", "Walking". */
+  travelMode: string
+  distanceKm: number
+  durationMin: number
+  via?: string
+  typicalRange?: string
+  notes: string[]
+  departs?: string
+  arrives?: string
+  legs: DirectionsLeg[]
+}
+
+/**
+ * Routes between two places for one travel mode. SerpApi's codes: 0 driving
+ * (best), 3 public transport, 9 two-wheeler, 2 walking.
+ */
+export async function fetchDirections(
+  tripId: string,
+  from: string,
+  to: string,
+  travelMode: 0 | 2 | 3 | 9
+): Promise<{ options: DirectionsOption[]; start?: GeoPoint; end?: GeoPoint }> {
+  const json = await serpFetch(
+    tripId,
+    "google_maps_directions",
+    { start_addr: from, end_addr: to, travel_mode: travelMode, hl: "en" },
+    3
+  )
+  if (!json) return { options: [] }
+
+  const places: any[] = json.places_info ?? []
+  const point = (p?: any): GeoPoint | undefined =>
+    p?.gps_coordinates
+      ? { name: String(p.address ?? ""), lat: p.gps_coordinates.latitude, lng: p.gps_coordinates.longitude }
+      : undefined
+
+  const options = ((json.directions as any[]) ?? []).map((d): DirectionsOption => {
+    const legs: DirectionsLeg[] = ((d.trips as any[]) ?? [])
+      .filter((t) => t.travel_mode === "Transit" || t.travel_mode === "Walking")
+      .map((t) => {
+        const icon = String(t.icon ?? "")
+        const operator = t.service_run_by?.name
+        return {
+          mode: String(t.travel_mode),
+          title: String(t.title ?? ""),
+          durationMin: Math.round((num(t.duration) ?? 0) / 60),
+          operator: operator ? String(operator) : undefined,
+          fromStop: t.start_stop?.name,
+          toStop: t.end_stop?.name,
+          departs: t.start_stop?.time,
+          arrives: t.end_stop?.time,
+          stops: num(t.stops),
+          rail: /rail|train|subway|tram/i.test(icon) || /railway|rail/i.test(String(operator ?? "")),
+        }
+      })
+    return {
+      travelMode: String(d.travel_mode ?? "Driving"),
+      distanceKm: Math.round(((num(d.distance) ?? 0) / 1000) * 10) / 10,
+      durationMin: Math.round((num(d.duration) ?? 0) / 60),
+      via: d.via,
+      typicalRange: d.typical_duration_range,
+      notes: Array.isArray(d.extensions) ? d.extensions.map(String).slice(0, 3) : [],
+      departs: d.start_time,
+      arrives: d.end_time,
+      legs,
+    }
+  })
+  return { options, start: point(places[0]), end: point(places[1]) }
+}
+
+export type WebSnippet = { title: string; snippet: string; link: string }
+
+/** A Google web search, reduced to what a model needs to quote a fact: titles, snippets, links. */
+export async function webSearch(
+  tripId: string,
+  query: string,
+  gl = "in"
+): Promise<{ answer?: string; results: WebSnippet[]; questions: { question: string; snippet: string }[] }> {
+  const json = await serpFetch(tripId, "google", { q: query, hl: "en", gl }, 5)
+  if (!json) return { results: [], questions: [] }
+  const box = json.answer_box
+  const answer: string | undefined = box?.answer ?? box?.snippet ?? box?.result
+  return {
+    answer: typeof answer === "string" ? answer.slice(0, 400) : undefined,
+    results: ((json.organic_results as any[]) ?? [])
+      .slice(0, 6)
+      .map((r) => ({
+        title: String(r.title ?? ""),
+        snippet: String(r.snippet ?? "").slice(0, 320),
+        link: safeHttpUrl(r.link) ?? "",
+      }))
+      .filter((r) => r.title && r.snippet),
+    questions: ((json.related_questions as any[]) ?? [])
+      .slice(0, 3)
+      .map((q) => ({ question: String(q.question ?? ""), snippet: String(q.snippet ?? "").slice(0, 280) }))
+      .filter((q) => q.question && q.snippet),
+  }
+}
+
+
+/** A live exchange rate from Google's converter ("1000 LKR to INR"), or null if it isn't available. */
+export async function convertCurrency(
+  tripId: string,
+  amount: number,
+  from: string,
+  to: string
+): Promise<{ amount: number; from: string; to: string; converted: number; asOf?: string } | null> {
+  const clean = (c: string) => c.trim().toUpperCase().slice(0, 3)
+  const json = await serpFetch(tripId, "google", { q: `${amount} ${clean(from)} to ${clean(to)}`, hl: "en" }, 1)
+  const box = json?.answer_box
+  const converted = num(box?.currency_converter?.to?.price ?? box?.price)
+  if (box?.type !== "currency_converter" || converted === undefined) return null
+  return { amount, from: clean(from), to: clean(to), converted: Math.round(converted * 100) / 100, asOf: box.date }
 }

@@ -1,20 +1,20 @@
 "use client"
 
+import * as React from "react"
 import { Tabs as TabsPrimitive } from "radix-ui"
 import {
   BarChart3,
   Bell,
-  BedDouble,
   Clapperboard,
   LayoutDashboard,
   ListChecks,
   Map as MapIcon,
+  MessagesSquare,
   Route,
   Settings,
   ShoppingBag,
   SlidersHorizontal,
   Users,
-  Vote,
   Wallet,
   type LucideIcon,
 } from "lucide-react"
@@ -27,16 +27,17 @@ import {
   SidebarMenuBadge,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { getChatUnread } from "@/server/chat"
 import { NavMenuButton } from "./nav-menu-button"
+import { useTripTab } from "./trip-tabs"
 import { NAV_GROUPS, type NavIcon } from "./nav-config"
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   overview: LayoutDashboard,
   itinerary: Route,
-  stay: BedDouble,
   gear: ShoppingBag,
   preferences: SlidersHorizontal,
-  decisions: Vote,
+  chat: MessagesSquare,
   crew: Users,
   insights: BarChart3,
   settings: Settings,
@@ -50,13 +51,47 @@ const ICONS: Record<NavIcon, LucideIcon> = {
 /** Sections that need this person's attention show a dot. Nothing else is counted. */
 export type NavBadges = Record<string, number | "dot">
 
+/** The chat's unread count, refreshed in the background so the sidebar stays honest from any section. */
+function useChatUnread(tripId: string, initial: number) {
+  const [count, setCount] = React.useState(initial)
+  React.useEffect(() => {
+    let alive = true
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return
+      try {
+        const n = await getChatUnread(tripId)
+        if (alive) setCount(n)
+      } catch {
+        /* offline: keep the last count */
+      }
+    }
+    const timer = window.setInterval(refresh, 20_000)
+    window.addEventListener("focus", refresh)
+    return () => {
+      alive = false
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+    }
+  }, [tripId])
+  return count
+}
+
 export function TripNav({
+  tripId,
   isAdmin,
-  badges,
+  badges: serverBadges,
 }: {
+  tripId: string
   isAdmin: boolean
   badges: NavBadges
 }) {
+  const { tab } = useTripTab()
+  const chatUnread = useChatUnread(tripId, typeof serverBadges.chat === "number" ? serverBadges.chat : 0)
+  // Reading the chat is how its badge clears, so don't show it while you're in it.
+  const badges: NavBadges = { ...serverBadges }
+  if (chatUnread > 0 && tab !== "chat") badges.chat = chatUnread
+  else delete badges.chat
+
   return (
     <TabsPrimitive.List asChild>
       <SidebarContent className="gap-7 px-4 py-6">
@@ -92,7 +127,7 @@ export function TripNav({
                       </TabsPrimitive.Trigger>
                       {needsAttention && (
                         <SidebarMenuBadge className="top-1/2! right-3 -translate-y-1/2">
-                          {item.value === "notifications" && typeof badges[item.value] === "number" ? (
+                          {(item.value === "notifications" || item.value === "chat") && typeof badges[item.value] === "number" ? (
                             <span
                               className="grid min-w-4 place-items-center bg-primary px-1 text-[10px] leading-4 font-semibold text-primary-foreground tabular-nums"
                               role="img"

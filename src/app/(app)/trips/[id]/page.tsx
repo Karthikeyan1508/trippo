@@ -15,7 +15,8 @@ import {
 import { computeBalances, settleUp } from "@/lib/budget"
 import { computeJourney, phaseLabel, tripPhase } from "@/lib/journey"
 import { activityIconKey } from "@/lib/trip-icons"
-import { haversineKm } from "@/lib/geo"
+import { numberStops } from "@/lib/stops"
+import { loadSnapshot } from "@/server/chat-core"
 import type { PreferenceInput, CreateTripInput } from "@/lib/validators"
 import {
   Sidebar,
@@ -37,11 +38,10 @@ import { TripTopBar } from "./trip-top-bar"
 import { InviteDialog } from "./invite-dialog"
 import { TripHub, type HubMember } from "./trip-hub"
 import { ItineraryTab } from "./itinerary-tab"
-import { TravelOptions } from "./travel-options"
+import { CrewChat } from "./chat/crew-chat"
 import { GearTab } from "./gear-tab"
 import { toPick } from "@/lib/gear"
 import { PreferenceForm } from "./preference-form"
-import { PollsPanel, type PollData } from "./polls-panel"
 import { CrewTab } from "./crew-tab"
 import { GroupInsights } from "./group-insights"
 import { SettingsTab } from "./settings-tab"
@@ -70,7 +70,6 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
       },
       invites: { where: { status: "PENDING" }, orderBy: { createdAt: "desc" } },
       prep: true,
-      stayOptions: { orderBy: { createdAt: "asc" } },
     },
   })
   if (!trip) notFound()
@@ -87,7 +86,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
   }
 
   // Everything below is independent of each other, so load it together.
-  const [itinerary, expenses, settlements, polls, checklist, products, notifications] = await Promise.all([
+  const [itinerary, expenses, settlements, chat, checklist, products, notifications] = await Promise.all([
     prisma.itinerary.findFirst({
       where: { tripId: id },
       orderBy: { generatedAt: "desc" },
@@ -105,11 +104,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
       orderBy: { createdAt: "desc" },
     }),
     prisma.settlement.findMany({ where: { tripId: id } }),
-    prisma.poll.findMany({
-      where: { tripId: id },
-      include: { votes: { select: { userId: true, option: true } } },
-      orderBy: { createdAt: "desc" },
-    }),
+    loadSnapshot(id, user.id, { limit: 50 }),
     loadChecklist(id, user.id, trip.prep),
     prisma.productSuggestion.findMany({
       where: { tripId: id },
@@ -144,32 +139,20 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
   // ── Located stops → numbered map pins ─────────────────────────────
   const stops: MapStop[] = []
   const stopNumbers: Record<string, number> = {}
-  // The home airport can be a continent away from the trip itself. Leave pins that far from
-  // everything else off the map, so it stays zoomed on where the group actually goes.
-  const located = (itinerary?.days ?? []).flatMap((d) => d.items).filter((it) => it.lat != null && it.lng != null)
-  const onSite = located.filter((it) => it.category !== "TRAVEL")
-  const focus =
-    onSite.length > 0
-      ? {
-          lat: [...onSite].map((it) => it.lat as number).sort((a, b) => a - b)[Math.floor(onSite.length / 2)],
-          lng: [...onSite].map((it) => it.lng as number).sort((a, b) => a - b)[Math.floor(onSite.length / 2)],
-        }
-      : null
-  const nearTrip = (it: { lat: number | null; lng: number | null; category: string }) =>
-    !focus || it.category !== "TRAVEL" || haversineKm({ lat: it.lat as number, lng: it.lng as number }, focus) <= 250
+  // Numbered map pins (the same numbers Trippo uses in chat, so "stop 3" means one thing).
+  const numbers = numberStops(itinerary?.days ?? [])
   for (const day of itinerary?.days ?? []) {
     for (const it of day.items) {
-      if (it.lat != null && it.lng != null && nearTrip(it)) {
-        const n = stops.length + 1
-        stops.push({
-          n,
-          lat: it.lat,
-          lng: it.lng,
-          title: it.title,
-          iconKey: activityIconKey(it.category, it.title, it.description),
-        })
-        stopNumbers[it.id] = n
-      }
+      const n = numbers.get(it.id)
+      if (n === undefined) continue
+      stops.push({
+        n,
+        lat: it.lat as number,
+        lng: it.lng as number,
+        title: it.title,
+        iconKey: activityIconKey(it.category, it.title, it.description),
+      })
+      stopNumbers[it.id] = n
     }
   }
   const mapCenter = stops.length > 0 ? { lat: stops[0].lat, lng: stops[0].lng } : null
@@ -237,13 +220,10 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
   })()
 
   // ── Sidebar attention markers ─────────────────────────────────────
-  const openPollsToVote = polls.filter(
-    (p) => !(p.closesAt && p.closesAt <= new Date()) && !p.votes.some((v) => v.userId === user.id)
-  ).length
   const badges: NavBadges = {}
   if (isVoter && !myMember.preference) badges.preferences = "dot"
   if (itinerary && !planLocked && isVoter && myStatus === "PENDING") badges.itinerary = "dot"
-  if (isVoter && openPollsToVote > 0) badges.decisions = openPollsToVote
+  if (chat.unread > 0) badges.chat = chat.unread
   // Crew picks this person hasn't weighed in on (and didn't suggest themselves).
   if (products.some((p) => !p.votes.some((v) => v.userId === user.id))) badges.gear = "dot"
   if (unreadCount > 0) badges.notifications = unreadCount
@@ -280,14 +260,30 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
     missing: voters.filter((m) => !m.hasPreference).map((m) => m.name.split(" ")[0]),
   }
 
-  const pollData: PollData[] = polls.map((poll) => ({
-    id: poll.id,
-    question: poll.question,
-    options: poll.options as unknown as string[],
-    votes: poll.votes,
-    closed: !!poll.closesAt && poll.closesAt <= new Date(),
-    createdById: poll.createdById,
+  const chatCrew = trip.members.map((m) => ({
+    id: m.userId,
+    name: displayName(m.user),
+    image: m.user.image,
+    role: m.role as "ADMIN" | "MEMBER" | "OBSERVER",
   }))
+  const chatViewer = chatCrew.find((c) => c.id === user.id)!
+  const planDays = (itinerary?.days ?? []).map((d) => ({
+    dayNumber: d.dayNumber,
+    label: d.date ? `Day ${d.dayNumber}, ${d.date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}` : `Day ${d.dayNumber}`,
+  }))
+  // Questions worth asking, built from this trip: a stay, a leg of the route, food.
+  const legs = (itinerary?.days ?? [])
+    .flatMap((d) => d.items)
+    .filter((it) => it.category === "ACTIVITY" && it.lat != null && it.title)
+  // A real stop reads better than a country: "near Sigiriya Rock" beats "near Sri Lanka".
+  const anchor = legs[0] ? (legs[0].placeName ?? legs[0].title) : null
+  const chatPrompts = [
+    anchor ? `@trippo top 3 hotels near ${anchor}` : `@trippo top 3 hotels in ${trip.destination}`,
+    legs.length >= 2 && legs[0].title !== legs[1].title
+      ? `@trippo how do we get from ${legs[0].placeName ?? legs[0].title} to ${legs[1].placeName ?? legs[1].title}?`
+      : `@trippo how do we get around ${trip.destination}?`,
+    anchor ? `@trippo best local food near ${anchor}` : `@trippo best local food in ${trip.destination}`,
+  ]
 
   const invite = {
     tripId: trip.id,
@@ -320,7 +316,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
             stagesTotal={steps.length}
           />
 
-          <TripNav isAdmin={isAdmin} badges={badges} />
+          <TripNav tripId={trip.id} isAdmin={isAdmin} badges={badges} />
 
           <SidebarFooter>
             <NavUser user={{ name: user.name, email: user.email, image: user.image }} />
@@ -328,18 +324,19 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
           <SidebarRail />
         </Sidebar>
 
-        <SidebarInset className="min-w-0">
+        {/* The chat fills the screen: the page itself stops scrolling and the chat card takes what is left. */}
+        <SidebarInset className="min-w-0 has-[[data-chat-root]]:h-svh has-[[data-chat-root]]:overflow-y-auto">
           <TripTopBar
             tripId={trip.id}
             tripName={trip.name}
             isAdmin={isAdmin}
             unreadCount={unreadCount}
-            actions={isVoter ? <InviteDialog {...invite} /> : null}
+            actions={isVoter ? <InviteDialog {...invite} compact /> : null}
           />
 
           <LocationBanner />
 
-          <div className="min-w-0 flex-1 px-4 pb-10 lg:px-6">
+          <div className="min-w-0 flex-1 px-4 pb-10 has-[[data-chat-root]]:flex has-[[data-chat-root]]:min-h-0 has-[[data-chat-root]]:flex-col has-[[data-chat-root]]:pb-4 lg:px-6">
             <TabsPrimitive.Content value="overview">
               <TripHub
                 steps={steps}
@@ -374,14 +371,17 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
               />
             </TabsPrimitive.Content>
 
-            <TabsPrimitive.Content value="stay">
-              <TravelOptions
+            <TabsPrimitive.Content value="chat" className="flex min-h-0 flex-1 flex-col pt-3">
+              <CrewChat
                 tripId={trip.id}
-                origin={trip.originCity ?? ""}
+                tripName={trip.name}
                 destination={trip.destination}
-                stays={trip.stayOptions}
-                isAdmin={isAdmin}
-                canVote={isVoter}
+                currency={trip.currency}
+                viewer={chatViewer}
+                crew={chatCrew}
+                planDays={planDays}
+                prompts={chatPrompts}
+                initial={chat}
               />
             </TabsPrimitive.Content>
 
@@ -416,24 +416,6 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
                   firstTime={!myMember.preference}
                 />
               </div>
-            </TabsPrimitive.Content>
-
-            <TabsPrimitive.Content value="decisions">
-              <PollsPanel
-                tripId={trip.id}
-                polls={pollData}
-                viewerId={user.id}
-                viewerIsAdmin={isAdmin}
-                canVote={isVoter}
-                voterCount={voters.length}
-                approval={{
-                  hasPlan: !!itinerary,
-                  locked: planLocked,
-                  approved: approvers.filter((a) => a.status === "APPROVED").length,
-                  total: approvers.length,
-                  myStatus,
-                }}
-              />
             </TabsPrimitive.Content>
 
             <TabsPrimitive.Content value="members">

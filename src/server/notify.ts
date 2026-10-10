@@ -19,7 +19,7 @@ export type NotifyInput = {
   type: NotificationType
   title: string
   body?: string
-  /** Relative path the notification opens, e.g. /trips/<id>?tab=decisions */
+  /** Relative path the notification opens, e.g. /trips/<id>?tab=chat */
   url: string
 }
 

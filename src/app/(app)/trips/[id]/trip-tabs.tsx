@@ -4,6 +4,8 @@ import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { Tabs as TabsPrimitive } from "radix-ui"
 
+import { TAB_ALIASES } from "./nav-config"
+
 type TripTabContextValue = { tab: string; setTab: (tab: string) => void }
 
 const TripTabContext = React.createContext<TripTabContextValue | null>(null)
@@ -31,7 +33,8 @@ export function TripTabs({
   children: React.ReactNode
 }) {
   const searchParams = useSearchParams()
-  const requested = searchParams.get("tab")
+  const asked = searchParams.get("tab")
+  const requested = asked ? (TAB_ALIASES[asked] ?? asked) : asked
   const tab = requested && allowed.includes(requested) ? requested : defaultTab
 
   const setTab = React.useCallback((next: string) => {

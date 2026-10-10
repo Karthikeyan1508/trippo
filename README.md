@@ -22,10 +22,10 @@ the single next thing _they_ should do:
 5. **Get ready & go**: prep guide + private packing checklist, live map,
    shared budget with settle-up, and a cinematic "story" fly-through.
 
-Along the way: polls for group decisions, a stay shortlist the group can vote
-on, local transport lookups, and **Gear & shopping**: trip-specific product
-ideas, Amazon search through SerpApi's `amazon` engine, and a crew list every
-member can add to and vote on.
+Along the way: a **crew chat** where `@trippo` answers hotel, transport and place
+questions from live SerpApi data (with polls and "add to itinerary" built in), and
+**Gear & shopping**: trip-specific product ideas, Amazon search through SerpApi's
+`amazon` engine, and a crew list every member can add to and vote on.
 
 ## Stack
 
@@ -61,6 +61,7 @@ npm run dev
 | `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Auth.js + Google sign-in |
 | `SERPAPI_API_KEY` | Live places, hotels, events, photos |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Itinerary, prep guide and story narration |
+| `GROQ_CHAT_MODEL` | Optional. Model for `@trippo` in the crew chat (defaults to `GROQ_MODEL`) |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | Optional premium voice-over (falls back to the browser voice) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional Web Push (`npx web-push generate-vapid-keys`; subject is a `mailto:` or https URL). Without them, in-app notifications still work |
 
@@ -81,11 +82,14 @@ npx tsc --noEmit # typecheck
 
 ```
 src/app/(app)/trips/[id]/   the trip workspace (server page + one component per section)
+src/app/(app)/trips/[id]/chat/   the crew chat UI (messages, cards, polls, composer)
 src/app/join/[code]/        public invite-link landing page
 src/lib/journey.ts          pure logic: the 5-stage journey + "your next step"
 src/lib/plan-state.ts       single source of truth for "is the plan approved?"
 src/lib/access.ts           membership / admin checks shared by server actions
 src/server/*                server actions (trips, itinerary, polls, budget, …)
+src/server/chat*.ts         chat actions and the shared chat queries
+src/server/trippo-*.ts      the @trippo agent and its SerpApi tools
 ```
 
 Notes for contributors:
@@ -115,11 +119,47 @@ Plans are built route-first, so they are travellable, not just a list of places:
 
 Without Groq, the same skeleton produces a complete deterministic plan.
 
+## Crew chat and @trippo
+
+The **Chat** tab is a group chat for the crew. Mention `@trippo` and the AI answers in the
+thread with live data instead of guesses:
+
+- **Hotels**: "top 3 hotels near Colombo" runs SerpApi `google_hotels` and returns cards with a
+  photo, nightly price, rating, amenities and distance. Ratings are weighted by review count,
+  so a 5.0 from a dozen reviews does not beat a 4.7 from thousands.
+- **Between two stops**: `google_maps_directions` for driving, transit (train and bus operators
+  with departure and arrival times), two-wheeler and walking, plus a web search for local fares
+  and a currency conversion. The fastest option is worked out in code, not by the model.
+- **Places and food**: `google_maps` search around a stop. **Anything else**: a web search,
+  summed up in a few sentences.
+
+Every card can go two ways:
+
+- **Add to itinerary**: an admin adds it straight to a day (in time order, and the votes on the
+  plan reset). Anyone else sends a request that the admins see in the chat and approve or decline.
+- **Start a poll**: tick two or more options on a card, or use the Poll button for a free-form
+  question. Polls live in the thread, votes are private, a result is posted when a poll closes,
+  and the winner can be added to the plan.
+
+How it works: `src/server/trippo-ai.ts` runs one tool round (the model picks tools, the code
+runs them in parallel) and then a forced `reply` call. Cards are built only from the tool
+results, never from text the model wrote, so no hotel or fare is invented. Groq's free tier has a
+small tokens-per-minute budget, so tool output is kept lean and a 429 is waited out and retried.
+Questions are limited to 10 per person per hour and 60 per trip per day, which protects the
+SerpApi and Groq quotas (a hotel question costs about 1 to 2 searches, a transport question
+about 6, and results are cached).
+
+The chat itself uses short polling (`getChat` with a `since` cursor), not websockets, which suits
+the free Render plan. `ChatMessage.updatedAt` is touched on every change, so votes, card states
+and request decisions reach everyone on the next poll. People who are away from the chat get a
+notification (and a push if enabled); people looking at it do not.
+
 ## Notifications & installing the app
 
-- **In-app inbox**: every crew action that matters (votes, polls, gear picks,
-  expenses, plan changes) writes a `Notification` row. The bell, the dashboard
-  section and `/notifications` all deep-link to the right trip section.
+- **In-app inbox**: every crew action that matters (chat mentions and messages while
+  you are away, polls, votes, gear picks, expenses, plan changes) writes a `Notification`
+  row. Notifications are scoped to a trip: each trip card has its own bell with a count,
+  and the bell and `/notifications` deep-link to the right trip section.
 - **Push**: standard Web Push (VAPID + service worker); no Firebase needed.
   Each person opts in per device in **Settings**. iPhones only allow push for
   apps added to the Home Screen.

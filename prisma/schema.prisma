@@ -36,6 +36,9 @@ model User {
   productVotes  ProductVote[]
   notifications     Notification[]
   pushSubscriptions PushSubscription[]
+  chatMessages      ChatMessage[]        @relation("ChatAuthor")
+  itineraryRequests ItineraryRequest[]   @relation("RequestedBy")
+  decidedRequests   ItineraryRequest[]   @relation("RequestDecidedBy")
 }
 
 model Account {
@@ -113,6 +116,8 @@ model Trip {
   stayOptions StayOption[]
   products    ProductSuggestion[]
   notifications Notification[]
+  chatMessages ChatMessage[]
+  itineraryRequests ItineraryRequest[]
 
   @@index([createdById])
 }
@@ -124,6 +129,10 @@ model TripMember {
   role     Role         @default(MEMBER)
   status   MemberStatus @default(ACTIVE)
   joinedAt DateTime     @default(now())
+  // The last time this person had the crew chat open and read to the bottom.
+  chatReadAt DateTime?
+  // Updated while the chat is open, so we don't push what they're already looking at.
+  chatSeenAt DateTime?
 
   trip       Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -141,10 +150,17 @@ model Poll {
   createdById String
   closesAt    DateTime?
   createdAt   DateTime   @default(now())
+  // Polls started from an AI suggestion keep the details of each option here.
+  meta            Json?
+  sourceMessageId String?
+  sourceCardId    String?
+  // When the result was posted in chat (a deadline can pass without anyone clicking).
+  announcedAt     DateTime?
 
   trip      Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
   createdBy User       @relation("PollCreator", fields: [createdById], references: [id], onDelete: Cascade)
   votes     PollVote[]
+  chatMessage ChatMessage?
 
   @@index([tripId])
 }
@@ -603,4 +619,73 @@ model PushSubscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum ChatKind {
+  TEXT
+  AI
+  POLL
+  SYSTEM
+  REQUEST
+}
+
+/// One message in a trip's crew chat: people, Trippo (the assistant), polls and notices.
+model ChatMessage {
+  id         String   @id @default(cuid())
+  tripId     String
+  // null for Trippo and for system notices
+  authorId   String?
+  kind       ChatKind @default(TEXT)
+  body       String   @default("")
+  // AI answers hold their cards and progress; notices hold the event (see src/lib/chat.ts).
+  payload    Json?
+  // For AI messages: "thinking" | "ready" | "failed"
+  status     String   @default("ready")
+  replyToId  String?
+  mentionIds String[] @default([])
+  pollId     String?  @unique
+  requestId  String?  @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  trip    Trip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  author  User?             @relation("ChatAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  replyTo ChatMessage?      @relation("ChatReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies ChatMessage[]     @relation("ChatReplies")
+  poll    Poll?             @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  request ItineraryRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
+  @@index([tripId, updatedAt])
+}
+
+/// "Add this to the itinerary": applied at once for an admin, or waiting for one to approve.
+model ItineraryRequest {
+  id            String    @id @default(cuid())
+  tripId        String
+  requestedById String
+  // PENDING | APPROVED | DECLINED
+  status        String    @default("PENDING")
+  // "hotel" | "transport" | "place"
+  kind          String
+  // Where it came from, so the AI card can show how it stands.
+  messageId     String?
+  itemKey       String?
+  // A snapshot of the suggestion (name, price, coordinates...) that outlives the chat card.
+  item          Json
+  dayNumber     Int?
+  startTime     String?
+  note          String?
+  decidedById   String?
+  decidedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  trip        Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  requestedBy User         @relation("RequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  decidedBy   User?        @relation("RequestDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  chatMessage ChatMessage?
+
+  @@index([tripId, status])
+  @@index([messageId, itemKey])
 }

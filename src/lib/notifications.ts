@@ -16,6 +16,12 @@ export type NotificationType =
   | "payment_received"
   | "prep_ready"
   | "stay_chosen"
+  | "chat_message"
+  | "chat_mention"
+  | "trippo_answer"
+  | "itinerary_request"
+  | "request_decided"
+  | "poll_closed"
   | "role_changed"
   | "trip_updated"
   | "test"
@@ -34,6 +40,12 @@ export const NOTIFICATION_ICONS: Record<NotificationType, string> = {
   payment_received: "wallet",
   prep_ready: "list",
   stay_chosen: "bed",
+  chat_message: "chat",
+  chat_mention: "chat",
+  trippo_answer: "sparkles",
+  itinerary_request: "list",
+  request_decided: "check",
+  poll_closed: "vote",
   role_changed: "shield",
   trip_updated: "pencil",
   test: "bell",

@@ -187,3 +187,23 @@ body,
 html {
   background-color: var(--background);
 }
+
+/* Crew chat: the flash when you jump to a message, and a chip row that scrolls without a bar. */
+@keyframes chat-flash {
+  0% {
+    background-color: color-mix(in oklab, var(--primary) 38%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.chat-flash {
+  animation: chat-flash 1.7s ease-out;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

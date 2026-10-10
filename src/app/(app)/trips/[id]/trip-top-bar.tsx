@@ -62,7 +62,7 @@ export function TripTopBar({
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator className="hidden lg:block" />
-          <BreadcrumbItem>
+          <BreadcrumbItem className="min-w-0">
             <BreadcrumbPage className="truncate font-medium">
               {LABELS[tab] ?? "Overview"}
             </BreadcrumbPage>
