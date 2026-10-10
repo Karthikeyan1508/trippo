@@ -374,7 +374,7 @@ export function LiveMap({
     <div className="space-y-4">
       <style>{`
         .tp-pin{width:40px;height:40px;border-radius:0;overflow:hidden;border:3px solid #10b981;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.35);display:grid;place-items:center;font-weight:600;font-size:12px;color:#111}
-        .tp-pin img{width:100%;height:100%;object-fit:cover}
+        .tp-pin img{display:block;width:100%;height:100%;max-width:none;flex:none;object-fit:cover;object-position:center}
         .tp-pin{position:relative}
         .tp-pin-me{border-color:#2563eb}
         .tp-pin-off{border-color:#9ca3af;border-style:dashed;opacity:.7}
