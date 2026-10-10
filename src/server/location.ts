@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
+import { isValidLatLng } from "@/lib/geo"
 
 type CheckpointTypeT = "POINT" | "STAY" | "FOOD" | "MEETING" | "DANGER"
 
@@ -55,7 +56,7 @@ export async function updateMyLocation(
   accuracy?: number
 ): Promise<ActionResult> {
   const user = await requireUser()
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+  if (!isValidLatLng({ lat, lng })) {
     return { ok: false, error: "Invalid coordinates." }
   }
   const member = await membership(tripId, user.id)
@@ -160,7 +161,7 @@ export async function addCheckpoint(
   if (member.role === "OBSERVER") {
     return { ok: false, error: "Observers can't add pins." }
   }
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+  if (!isValidLatLng({ lat, lng })) {
     return { ok: false, error: "Invalid coordinates." }
   }
 

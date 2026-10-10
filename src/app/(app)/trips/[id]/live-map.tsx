@@ -60,6 +60,7 @@ const CP_TYPES = [
   { value: "MEETING", label: "Meeting point" },
   { value: "DANGER", label: "Caution" },
 ]
+const PIN_PLACEMENT_ZOOM = 18
 
 function CpIcon({ type, className }: { type: string; className?: string }) {
   const Icon = CP_ICONS[type] ?? MapPin
@@ -134,6 +135,7 @@ export function LiveMap({
   const [pending, setPending] = React.useState<{ lat: number; lng: number } | null>(
     null
   )
+  const [placingPin, setPlacingPin] = React.useState<{ lat: number; lng: number } | null>(null)
   const [pendingName, setPendingName] = React.useState("")
   const [pendingType, setPendingType] = React.useState("POINT")
   const [savingCp, setSavingCp] = React.useState(false)
@@ -176,9 +178,10 @@ export function LiveMap({
       cpLayerRef.current = L.layerGroup().addTo(map)
       if (canEdit) {
         map.on("click", (e: LeafletNS.LeafletMouseEvent) => {
-          setPendingName("")
-          setPendingType("POINT")
-          setPending({ lat: e.latlng.lat, lng: e.latlng.lng })
+          setPlacingPin({ lat: e.latlng.lat, lng: e.latlng.lng })
+          if (map.getZoom() < PIN_PLACEMENT_ZOOM) {
+            map.flyTo(e.latlng, PIN_PLACEMENT_ZOOM, { duration: 0.45 })
+          }
         })
       }
       mapRef.current = map
@@ -192,6 +195,30 @@ export function LiveMap({
       setReady(false)
     }
   }, [initialCenter, canEdit])
+
+  // A pin is deliberately placed only after the person has zoomed in and confirmed it.
+  React.useEffect(() => {
+    const L = LRef.current
+    const map = mapRef.current
+    if (!ready || !L || !map || !placingPin) return
+    const marker = L.marker([placingPin.lat, placingPin.lng], {
+      draggable: true,
+      zIndexOffset: 1_000,
+      icon: L.divIcon({
+        className: "",
+        html: `<div class="tp-cp tp-cp-draft">${cpMarkerSvg("POINT")}</div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 32],
+      }),
+    }).addTo(map)
+    marker.on("dragend", () => {
+      const { lat, lng } = marker.getLatLng()
+      setPlacingPin({ lat, lng })
+    })
+    return () => {
+      marker.remove()
+    }
+  }, [placingPin, ready])
 
   // Poll live data every 5s.
   React.useEffect(() => {
@@ -356,6 +383,7 @@ export function LiveMap({
         .tp-cp{width:30px;height:30px;border-radius:0;background:var(--primary);color:var(--primary-foreground);border:2px solid #fff;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.35);cursor:pointer}
         .tp-cp svg{width:16px;height:16px}
         .tp-cp-danger{background:#dc2626;color:#fff}
+        .tp-cp-draft{background:#2563eb;box-shadow:0 0 0 4px rgba(37,99,235,.22),0 1px 5px rgba(0,0,0,.35)}
         .leaflet-container{font:inherit}
       `}</style>
 
@@ -418,10 +446,28 @@ export function LiveMap({
         ref={containerRef}
         className="relative z-0 h-[420px] w-full overflow-hidden rounded-xl border bg-muted"
       />
+      {placingPin && canEdit && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border bg-card p-3">
+          <div>
+            <p className="text-sm font-medium">Place pin precisely</p>
+            <p className="text-xs text-muted-foreground">Zoom in or drag the blue pin to the exact spot, then continue.</p>
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">{placingPin.lat.toFixed(5)}, {placingPin.lng.toFixed(5)}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setPlacingPin(null)}>Cancel</Button>
+            <Button size="sm" onClick={() => {
+              setPendingName("")
+              setPendingType("POINT")
+              setPending(placingPin)
+              setPlacingPin(null)
+            }}>Use this location</Button>
+          </div>
+        </div>
+      )}
       {canEdit && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Navigation className="size-3.5" />
-          Tap anywhere on the map to drop a checkpoint.
+          Tap the map to place a checkpoint precisely.
         </p>
       )}
 
