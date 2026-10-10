@@ -1,4 +1,4 @@
-import { ArrowRight, Check, CircleDashed, Sparkles } from "lucide-react"
+import { ArrowRight, Check, CircleDashed, Download, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ApprovalPanel } from "./approval-panel"
@@ -50,13 +50,23 @@ export function ItineraryTab({
               : "A day-by-day plan built from the group's preferences and live place data."}
           </p>
         </div>
-        {isAdmin && itinerary && (
-          <GenerateItineraryButton
-            tripId={tripId}
-            hasExisting
-            planLocked={approval.locked}
-            hasVotes={hasVotes}
-          />
+        {itinerary && (
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" className="gap-2">
+              <a href={`/print/trips/${tripId}`} target="_blank" rel="noopener noreferrer">
+                <Download className="size-4" />
+                Download PDF
+              </a>
+            </Button>
+            {isAdmin && (
+              <GenerateItineraryButton
+                tripId={tripId}
+                hasExisting
+                planLocked={approval.locked}
+                hasVotes={hasVotes}
+              />
+            )}
+          </div>
         )}
       </div>
 
