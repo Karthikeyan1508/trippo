@@ -63,7 +63,7 @@ export default async function PrintPage({
       }
     >
       <style>{`
-        @page { size: A4; margin: 1.1cm; }
+        @page { size: A4; margin: 1.6cm 1.5cm 1.2cm; }
         html, body { background: #fff; }
         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         @media print { html { zoom: .88; } }
