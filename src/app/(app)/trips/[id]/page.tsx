@@ -567,6 +567,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
                   tripId={trip.id}
                   initial={(savedStory?.data as unknown as StoryData | undefined) ?? null}
                   isAdmin={isAdmin}
+                  planConfirmed={planLocked}
                   shareToken={isAdmin ? (savedStory?.shareToken ?? null) : null}
                 />
               ) : (

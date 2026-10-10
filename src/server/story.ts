@@ -16,6 +16,7 @@ import {
 } from "@/server/serpapi"
 import { narrateTrip } from "@/server/groq"
 import { activityIconKey } from "@/lib/trip-icons"
+import { haversineKm } from "@/lib/geo"
 
 export type StoryScene = {
   n: number
@@ -41,30 +42,69 @@ export type StoryData = {
   intro: string
   outro: string
   scenes: StoryScene[]
+  /** Older stories: one road-following line through everything. */
   route: [number, number][] | null
+  /** Newer stories: one entry per hop, roads where a road exists and a straight dashed line where not. */
+  legs?: { coords: [number, number][]; mode: "road" | "direct" }[]
   narrated: boolean
 }
 
 type Built = ({ ok: true } & StoryData) | { ok: false; error: string }
 
-/** Road-following polyline through the stops (OSRM public API); null on failure. */
-async function fetchRoute(
-  coords: [number, number][]
-): Promise<[number, number][] | null> {
-  if (coords.length < 2) return null
+type Pt = { lat: number; lng: number; category: string; title: string }
+
+async function roadLeg(a: Pt, b: Pt): Promise<[number, number][] | null> {
   try {
-    const path = coords.map((c) => `${c[0]},${c[1]}`).join(";")
     const res = await fetch(
-      `https://router.project-osrm.org/route/v1/driving/${path}?overview=full&geometries=geojson`,
-      { cache: "no-store" }
+      `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`,
+      { cache: "no-store", signal: AbortSignal.timeout(6000) }
     )
     if (!res.ok) return null
-    const json = await res.json()
-    const line = json?.routes?.[0]?.geometry?.coordinates
-    return Array.isArray(line) ? (line as [number, number][]) : null
+    const route = (await res.json())?.routes?.[0]
+    const line = route?.geometry?.coordinates as [number, number][] | undefined
+    if (!Array.isArray(line) || line.length < 2) return null
+    // A road route that does not start and end at the stops (the stop is off the road network,
+    // across water, ...) or that wanders far from a straight hop is not a real leg.
+    const first = line[0]
+    const last = line[line.length - 1]
+    const near = (p: [number, number], q: Pt) => haversineKm({ lat: p[1], lng: p[0] }, q) <= 3
+    const straight = haversineKm(a, b)
+    if (!near(first, a) || !near(last, b)) return null
+    if (route.distance / 1000 > straight * 3 + 5) return null
+    return line
   } catch {
     return null
   }
+}
+
+/**
+ * One line per hop between consecutive stops, so the route is always connected: a road line
+ * where the public routing service finds one, a straight dashed line for flights and other
+ * hops no road covers (or when the service is down).
+ */
+async function buildLegs(points: Pt[]): Promise<{ coords: [number, number][]; mode: "road" | "direct" }[]> {
+  const hops = points.slice(1).map((b, i) => ({ a: points[i], b }))
+  const isFlight = (p: Pt) => p.category === "TRAVEL" && /flight|fly|airport/i.test(p.title)
+  const legs: { coords: [number, number][]; mode: "road" | "direct" }[] = new Array(hops.length)
+  let next = 0
+  const worker = async () => {
+    while (next < hops.length) {
+      const i = next++
+      const { a, b } = hops[i]
+      const direct = { coords: [[a.lng, a.lat], [b.lng, b.lat]] as [number, number][], mode: "direct" as const }
+      const km = haversineKm(a, b)
+      if (km < 0.05) {
+        legs[i] = direct
+      } else if (km > 400 || isFlight(a) || isFlight(b)) {
+        legs[i] = direct
+      } else {
+        const line = await roadLeg(a, b)
+        legs[i] = line ? { coords: line, mode: "road" } : direct
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, hops.length) }, worker))
+  return legs
 }
 
 function iso(d: Date) {
@@ -185,9 +225,7 @@ async function buildStory(tripId: string, userId: string): Promise<Built> {
   )
 
   // Road-following route through all stops (like driving directions).
-  const route = await fetchRoute(
-    raw.map((s) => [s.lng, s.lat] as [number, number])
-  )
+  const legs = await buildLegs(raw.map((s) => ({ lat: s.lat, lng: s.lng, category: s.category, title: s.title })))
 
   const fallbackLine = (s: (typeof raw)[number]) =>
     `${s.title}${
@@ -220,7 +258,8 @@ async function buildStory(tripId: string, userId: string): Promise<Built> {
       narration?.outro?.trim() ||
       `That's a wrap on ${trip.destination}. What a trip!`,
     scenes,
-    route,
+    route: null,
+    legs,
     narrated: narration !== null,
   }
 }
@@ -231,6 +270,14 @@ async function adminOf(tripId: string) {
   const user = await requireUser()
   const member = await prisma.tripMember.findUnique({ where: { tripId_userId: { tripId, userId: user.id } } })
   return { user, member }
+}
+
+const NOT_CONFIRMED = "The story can be created once everyone has approved the plan."
+
+/** The story is made from the final plan, so it waits until the crew has approved it. */
+async function planIsConfirmed(tripId: string) {
+  const itinerary = await prisma.itinerary.findFirst({ where: { tripId }, orderBy: { generatedAt: "desc" }, select: { status: true } })
+  return itinerary?.status === "FINAL"
 }
 
 /**
@@ -244,6 +291,7 @@ export async function generateTripStory(tripId: string): Promise<ActionResult<{ 
   if (await prisma.tripStory.findUnique({ where: { tripId }, select: { id: true } })) {
     return { ok: false, error: "This trip's story has already been created." }
   }
+  if (!(await planIsConfirmed(tripId))) return { ok: false, error: NOT_CONFIRMED }
 
   const built = await buildStory(tripId, user.id)
   if (!built.ok) return built
@@ -284,6 +332,7 @@ export async function requestTripStory(tripId: string): Promise<ActionResult> {
   if (await prisma.tripStory.findUnique({ where: { tripId }, select: { id: true } })) {
     return { ok: false, error: "The story has already been created." }
   }
+  if (!(await planIsConfirmed(tripId))) return { ok: false, error: NOT_CONFIRMED }
   const limited = rateLimit(`story-request:${tripId}:${user.id}`, 1, 6 * 60 * 60 * 1000)
   if (!limited.ok) return { ok: true }
   await notify({

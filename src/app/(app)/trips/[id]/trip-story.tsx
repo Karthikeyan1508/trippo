@@ -64,8 +64,9 @@ function loadSvgImage(svg: string): Promise<HTMLImageElement> {
   })
 }
 
-// Draw a Lucide icon inside a primary-coloured circle for use as a map marker.
-async function makeIconMarker(iconKey: string): Promise<ImageData | null> {
+// Draw a Lucide icon inside a primary-coloured circle, with the stop number(s) as a square
+// badge on its corner. Baked into the image so it stays crisp and never collides with map text.
+async function makeIconMarker(iconKey: string, label: string): Promise<ImageData | null> {
   if (typeof document === "undefined") return null
   const fill = cssVarToHex("--primary")
   const ink = cssVarToHex("--primary-foreground", "#1f2e05")
@@ -75,15 +76,18 @@ async function makeIconMarker(iconKey: string): Promise<ImageData | null> {
     strokeWidth: 2.25,
   })
   const dpr = 2
-  const size = 44
+  const W = 96
+  const H = 80
+  const cx = W / 2
+  const cy = H / 2
   const c = document.createElement("canvas")
-  c.width = size * dpr
-  c.height = size * dpr
+  c.width = W * dpr
+  c.height = H * dpr
   const ctx = c.getContext("2d")
   if (!ctx) return null
   ctx.scale(dpr, dpr)
   ctx.beginPath()
-  ctx.arc(size / 2, size / 2, size / 2 - 3, 0, Math.PI * 2)
+  ctx.arc(cx, cy, 19, 0, Math.PI * 2)
   ctx.fillStyle = fill
   ctx.fill()
   ctx.lineWidth = 2.5
@@ -93,12 +97,39 @@ async function makeIconMarker(iconKey: string): Promise<ImageData | null> {
     try {
       const img = await loadSvgImage(svg)
       const s = 22
-      ctx.drawImage(img, (size - s) / 2, (size - s) / 2, s, s)
+      ctx.drawImage(img, cx - s / 2, cy - s / 2, s, s)
     } catch {
       /* fall back to the plain circle */
     }
   }
-  return ctx.getImageData(0, 0, size * dpr, size * dpr)
+  if (label) {
+    ctx.font = "700 13px system-ui, sans-serif"
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    const w = Math.max(20, ctx.measureText(label).width + 10)
+    const bx = cx + 8
+    const by = cy - 31
+    ctx.fillStyle = "#10170a"
+    ctx.fillRect(bx, by, w, 20)
+    ctx.strokeStyle = "#ffffff"
+    ctx.lineWidth = 1.5
+    ctx.strokeRect(bx, by, w, 20)
+    ctx.fillStyle = "#ffffff"
+    ctx.fillText(label, bx + w / 2, by + 10.5)
+  }
+  return ctx.getImageData(0, 0, W * dpr, H * dpr)
+}
+
+/** Stops that share a spot (the airport at both ends of a trip) become one marker with all their numbers. */
+function groupStops(scenes: LoadedStory["scenes"]) {
+  const groups = new Map<string, { lat: number; lng: number; iconKey: string; ns: number[] }>()
+  for (const sc of scenes) {
+    const key = `${sc.lat.toFixed(3)},${sc.lng.toFixed(3)}`
+    const g = groups.get(key)
+    if (g) g.ns.push(sc.n)
+    else groups.set(key, { lat: sc.lat, lng: sc.lng, iconKey: sc.iconKey, ns: [sc.n] })
+  }
+  return [...groups.values()].map((g) => ({ ...g, label: g.ns.join(", ") }))
 }
 
 /** Admin control for the public link: only this story is shared, never the trip. */
@@ -177,6 +208,7 @@ export function TripStory({
   initial,
   isAdmin,
   shareToken: initialToken,
+  planConfirmed = true,
   publicMode = false,
 }: {
   tripId: string
@@ -184,6 +216,8 @@ export function TripStory({
   initial: LoadedStory | null
   isAdmin: boolean
   shareToken: string | null
+  /** The crew has approved the plan: only then can the story be created or requested. */
+  planConfirmed?: boolean
   /** Someone watching through the public link: full screen, no controls that need an account. */
   publicMode?: boolean
 }) {
@@ -272,46 +306,62 @@ export function TripStory({
       map.on("load", async () => {
         if (cancelled || !story) return
 
-        // Route line through the stops (road-following when available).
-        const routeCoords =
-          story.route ?? story.scenes.map((s) => [s.lng, s.lat])
+        // Route: real road legs as solid lines, hops that cannot be driven (flights, ferries,
+        // long jumps) as dashed straight lines, so every stop is joined to the next.
+        const legs: { coords: number[][]; mode: string }[] =
+          story.legs && story.legs.length > 0
+            ? story.legs
+            : [{ coords: story.route ?? story.scenes.map((s) => [s.lng, s.lat]), mode: "road" }]
         map.addSource("route", {
           type: "geojson",
           data: {
-            type: "Feature",
-            geometry: { type: "LineString", coordinates: routeCoords },
-            properties: {},
+            type: "FeatureCollection",
+            features: legs.map((l) => ({
+              type: "Feature",
+              geometry: { type: "LineString", coordinates: l.coords },
+              properties: { mode: l.mode },
+            })),
           },
+        })
+        map.addLayer({
+          id: "route-direct",
+          type: "line",
+          source: "route",
+          filter: ["==", ["get", "mode"], "direct"],
+          layout: { "line-cap": "butt", "line-join": "round" },
+          paint: { "line-color": cssVarToHex("--chart-3"), "line-width": 3, "line-opacity": 0.75, "line-dasharray": [2, 2] },
         })
         map.addLayer({
           id: "route-line",
           type: "line",
           source: "route",
+          filter: ["==", ["get", "mode"], "road"],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: { "line-color": cssVarToHex("--chart-3"), "line-width": 4, "line-opacity": 0.9 },
         })
 
-        // Icon marker images (Lucide → canvas → usable on the GL map).
-        const iconId = (k: string) => `ic-${k}`
+        // Marker images: one per icon and number label.
+        const places = groupStops(story.scenes)
+        const imageId = (k: string, label: string) => `ic-${k}-${label}`
         await Promise.all(
-          [...new Set(story.scenes.map((s) => s.iconKey))].map(async (k) => {
-            const id = iconId(k)
+          places.map(async (pl) => {
+            const id = imageId(pl.iconKey, pl.label)
             if (map.hasImage(id)) return
-            const img = await makeIconMarker(k)
+            const img = await makeIconMarker(pl.iconKey, pl.label)
             if (img && !map.hasImage(id)) map.addImage(id, img, { pixelRatio: 2 })
           })
         )
         if (cancelled) return
 
-        // Native stop pins (GPU-rendered → no lag while the camera moves).
+        // Native stop pins (GPU-rendered, so no lag while the camera moves).
         map.addSource("stops", {
           type: "geojson",
           data: {
             type: "FeatureCollection",
-            features: story.scenes.map((s) => ({
+            features: places.map((pl) => ({
               type: "Feature",
-              geometry: { type: "Point", coordinates: [s.lng, s.lat] },
-              properties: { n: s.n, icon: iconId(s.iconKey) },
+              geometry: { type: "Point", coordinates: [pl.lng, pl.lat] },
+              properties: { ns: `,${pl.ns.join(",")},`, icon: imageId(pl.iconKey, pl.label) },
             })),
           },
         })
@@ -319,8 +369,8 @@ export function TripStory({
           id: "stops-halo",
           type: "circle",
           source: "stops",
-          paint: { "circle-radius": 22, "circle-color": cssVarToHex("--primary"), "circle-opacity": 0.35 },
-          filter: ["==", ["get", "n"], -1],
+          paint: { "circle-radius": 24, "circle-color": cssVarToHex("--primary"), "circle-opacity": 0.35 },
+          filter: ["==", ["get", "ns"], ""],
         })
         map.addLayer({
           id: "stops-icon",
@@ -328,19 +378,8 @@ export function TripStory({
           source: "stops",
           layout: {
             "icon-image": ["get", "icon"],
-            "icon-size": 0.62,
+            "icon-size": 0.8,
             "icon-allow-overlap": true,
-            "text-field": ["to-string", ["get", "n"]],
-            "text-font": ["Open Sans Bold"],
-            "text-size": 11,
-            "text-offset": [0, 1.35],
-            "text-anchor": "top",
-            "text-allow-overlap": true,
-          },
-          paint: {
-            "text-color": "#111827",
-            "text-halo-color": "#ffffff",
-            "text-halo-width": 1.4,
           },
         })
         map.resize()
@@ -398,11 +437,7 @@ export function TripStory({
     }
     // highlight the current stop (native filter update, instant, no lag)
     if (map.getLayer("stops-halo")) {
-      map.setFilter("stops-halo", [
-        "==",
-        ["get", "n"],
-        step >= 1 && step <= N ? step : -1,
-      ])
+      map.setFilter("stops-halo", step >= 1 && step <= N ? ["in", `,${step},`, ["get", "ns"]] : ["==", ["get", "ns"], ""])
     }
   }, [step, mapReady, started, story, N])
 
@@ -512,7 +547,12 @@ export function TripStory({
               A cinematic fly-through of your itinerary. The map travels stop to stop in 3D, with photos of each place
               and an AI voice-over. It is created once and then kept, so make sure the plan is final.
             </p>
-            <Button onClick={create} disabled={loading} size="lg" className="mt-6 gap-2">
+            {!planConfirmed && (
+              <p className="mt-3 max-w-md text-sm font-medium text-foreground">
+                Available once everyone has approved the plan. Approve it in the Itinerary tab first.
+              </p>
+            )}
+            <Button onClick={create} disabled={loading || !planConfirmed} size="lg" className="mt-6 gap-2">
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {loading ? "Building your story…" : "Create visual story"}
             </Button>
@@ -523,7 +563,10 @@ export function TripStory({
             <p className="mt-1 max-w-md text-sm text-muted-foreground">
               Only an admin can create the trip story, and only once. Ask them to make it when the plan is final, and it will show up here.
             </p>
-            <Button onClick={askAdmins} disabled={loading || requested} variant={requested ? "outline" : "default"} size="lg" className="mt-6 gap-2">
+            {!planConfirmed && (
+              <p className="mt-3 max-w-md text-sm font-medium text-foreground">Available once everyone has approved the plan.</p>
+            )}
+            <Button onClick={askAdmins} disabled={loading || requested || !planConfirmed} variant={requested ? "outline" : "default"} size="lg" className="mt-6 gap-2">
               {loading ? <Loader2 className="size-4 animate-spin" /> : requested ? <Clapperboard className="size-4" /> : <Sparkles className="size-4" />}
               {requested ? "Requested" : "Request an admin to create the story"}
             </Button>
