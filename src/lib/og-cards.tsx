@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+import path from "node:path"
 import { ImageResponse } from "next/og"
 
 import { prisma } from "@/lib/prisma"
@@ -10,6 +12,31 @@ import { formatDateRange, tripDurationDays } from "@/lib/format"
  */
 
 export const OG_SIZE = { width: 1200, height: 630 }
+
+/**
+ * The app's own typeface (Space Grotesk), shipped as TTF because Satori cannot read the
+ * woff2 files next/font produces. Without it the cards fall back to a generic sans.
+ */
+const FONT_FAMILY = "Space Grotesk"
+let fontCache: Promise<{ name: string; data: Buffer; weight: 400 | 700; style: "normal" }[]> | null = null
+function fonts() {
+  fontCache ??= Promise.all(
+    ([["SpaceGrotesk-Regular.ttf", 400], ["SpaceGrotesk-Bold.ttf", 700]] as const).map(async ([file, weight]) => ({
+      name: FONT_FAMILY,
+      data: await readFile(path.join(process.cwd(), "src/assets/fonts", file)),
+      weight,
+      style: "normal" as const,
+    }))
+  ).catch((error) => {
+    console.error("OG fonts failed to load:", error)
+    fontCache = null
+    return []
+  })
+  return fontCache
+}
+async function ogOptions() {
+  return { ...OG_SIZE, fonts: await fonts() }
+}
 
 const LIME = "#8be000"
 const INK = "#10170a"
@@ -62,6 +89,7 @@ function Frame({ children }: { children: React.ReactNode }) {
         padding: 64,
         gap: 56,
         color: "#fff",
+        fontFamily: FONT_FAMILY,
         background: INK,
         backgroundImage:
           "radial-gradient(circle at 100% 100%, rgba(139,224,0,0.42), rgba(139,224,0,0) 55%), radial-gradient(circle at 0% 0%, rgba(139,224,0,0.14), rgba(139,224,0,0) 45%)",
@@ -91,7 +119,7 @@ async function loadPhoto(url: string | null | undefined): Promise<string | null>
 }
 
 /** The generic Trippo card, used for the site itself and as the fallback for bad links. */
-export function brandCard() {
+export async function brandCard() {
   const points = ["AI plans from real data", "A live map of the crew", "Budgets that settle up"]
   return new ImageResponse(
     (
@@ -145,7 +173,7 @@ export function brandCard() {
         </div>
       </Frame>
     ),
-    OG_SIZE
+    await ogOptions()
   )
 }
 
@@ -261,7 +289,7 @@ export async function inviteCard(code: string) {
         </div>
       </Frame>
     ),
-    OG_SIZE
+    await ogOptions()
   )
 }
 
@@ -306,6 +334,7 @@ export async function storyCard(token: string) {
           display: "flex",
           position: "relative",
           color: "#fff",
+          fontFamily: FONT_FAMILY,
           background: INK,
           backgroundImage:
             "radial-gradient(circle at 100% 100%, rgba(139,224,0,0.42), rgba(139,224,0,0) 55%), radial-gradient(circle at 0% 0%, rgba(139,224,0,0.14), rgba(139,224,0,0) 45%)",
@@ -389,6 +418,6 @@ export async function storyCard(token: string) {
         </div>
       </div>
     ),
-    OG_SIZE
+    await ogOptions()
   )
 }
