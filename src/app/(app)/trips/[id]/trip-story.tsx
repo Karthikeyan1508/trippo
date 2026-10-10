@@ -451,38 +451,46 @@ export function TripStory({
           ? story.scenes[step - 1].narration
           : story.outro
 
+    // Leaving this step (Next, Previous, pause) cancels its speech, and a cancelled utterance reports
+    // "ended". Without this flag that late report advanced the story a second time.
     let done = false
+    let cancelled = false
+    const abort = new AbortController()
     const finish = () => {
-      if (done) return
+      if (done || cancelled) return
       done = true
       if (step >= N + 1) {
         setPlaying(false)
       } else {
-        setStep((s) => s + 1)
+        setStep((s) => (s === step ? s + 1 : s))
       }
     }
 
     const speakWithDevice = () => {
       const synth = typeof window !== "undefined" ? window.speechSynthesis : null
-      if (!synth || mutedRef.current) return
+      if (!synth || mutedRef.current || cancelled) return
       try { synth.cancel(); const u = new SpeechSynthesisUtterance(text); u.rate = 1.0; u.onend = finish; u.onerror = finish; synth.speak(u) } catch { /* timer remains */ }
     }
     if (!mutedRef.current) {
       if (premiumUnavailableRef.current) speakWithDevice()
-      else fetch("/api/voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, tripId }) })
+      else fetch("/api/voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, tripId }), signal: abort.signal })
         .then(async (response) => {
+          if (cancelled) return
           if (!response.ok) { premiumUnavailableRef.current = true; speakWithDevice(); return }
           const blob = await response.blob()
+          if (cancelled) return
           const url = URL.createObjectURL(blob)
           const audio = new Audio(url)
           audioRef.current = audio
           audio.onended = () => { URL.revokeObjectURL(url); finish() }
           audio.onerror = () => { URL.revokeObjectURL(url); speakWithDevice() }
           audio.play().catch(speakWithDevice)
-        }).catch(speakWithDevice)
+        }).catch(() => { if (!cancelled) speakWithDevice() })
     }
     const safety = setTimeout(finish, estimateMs(text) + (step === 0 ? 600 : 0))
     return () => {
+      cancelled = true
+      abort.abort()
       clearTimeout(safety)
       window.speechSynthesis?.cancel()
       audioRef.current?.pause()
@@ -494,6 +502,11 @@ export function TripStory({
     setStarted(true)
     setStep(0)
     setPlaying(true)
+  }
+  /** Previous / Next. They also bring the map to life if the story has not been started yet. */
+  function go(delta: number) {
+    setStarted(true)
+    setStep((s) => Math.min(N + 1, Math.max(0, s + delta)))
   }
   function restart() {
     window.speechSynthesis?.cancel()
@@ -743,8 +756,9 @@ export function TripStory({
           {/* Controls */}
           <div className="flex shrink-0 items-center gap-2 border-t p-3">
             <button
-              onClick={() => setStep((s) => Math.max(0, s - 1))}
-              className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => go(-1)}
+              disabled={step === 0}
+              className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
               aria-label="Previous"
             >
               <SkipBack className="size-4" />
@@ -761,8 +775,9 @@ export function TripStory({
               )}
             </button>
             <button
-              onClick={() => setStep((s) => Math.min(N + 1, s + 1))}
-              className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => go(1)}
+              disabled={step >= N + 1}
+              className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
               aria-label="Next"
             >
               <SkipForward className="size-4" />

@@ -51,6 +51,7 @@ import { TripModeControls } from "@/components/trip-mode-controls"
 import { BudgetTab } from "./budget-tab"
 import { TripStory } from "./trip-story"
 import type { StoryData } from "@/server/story"
+import { withConnectedRoute } from "@/server/story-route"
 import type { MapStop } from "./itinerary-map"
 
 type ApprovalStatus = "APPROVED" | "REJECTED" | "PENDING"
@@ -125,6 +126,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
     prisma.tripStory.findUnique({ where: { tripId: id }, select: { data: true, shareToken: true } }),
   ])
   const unreadCount = notifications.filter((n) => !n.read).length
+  const story = savedStory ? await withConnectedRoute(id, savedStory.data as unknown as StoryData) : null
 
   // ── Approval state ────────────────────────────────────────────────
   const approvalOf = (userId: string): ApprovalStatus =>
@@ -566,7 +568,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
               {itinerary ? (
                 <TripStory
                   tripId={trip.id}
-                  initial={(savedStory?.data as unknown as StoryData | undefined) ?? null}
+                  initial={story}
                   isAdmin={isAdmin}
                   planConfirmed={planLocked}
                   shareToken={isAdmin ? (savedStory?.shareToken ?? null) : null}

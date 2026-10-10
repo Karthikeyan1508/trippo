@@ -7,6 +7,7 @@ import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { TripStory } from "@/app/(app)/trips/[id]/trip-story"
 import type { StoryData } from "@/server/story"
+import { withConnectedRoute } from "@/server/story-route"
 
 /**
  * A trip's story, open to anyone holding its link. This route reads only the saved story
@@ -15,8 +16,9 @@ import type { StoryData } from "@/server/story"
  */
 async function loadShared(token: string): Promise<StoryData | null> {
   if (!/^[\w-]{16,64}$/.test(token)) return null
-  const row = await prisma.tripStory.findUnique({ where: { shareToken: token }, select: { data: true } })
-  return (row?.data as unknown as StoryData | undefined) ?? null
+  const row = await prisma.tripStory.findUnique({ where: { shareToken: token }, select: { data: true, tripId: true } })
+  if (!row) return null
+  return withConnectedRoute(row.tripId, row.data as unknown as StoryData)
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
