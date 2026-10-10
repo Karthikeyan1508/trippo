@@ -470,6 +470,7 @@ export async function runTrippoForMessage(aiMessageId: string) {
       await notify({
         tripId,
         to: { users: [asked] },
+        push: false,
         type: "trippo_answer",
         title: "Trippo answered your question",
         body: snippet(answer.message, 120),

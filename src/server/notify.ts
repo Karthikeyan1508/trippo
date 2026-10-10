@@ -27,6 +27,8 @@ export type NotifyInput = {
    * instead of replacing the last. Default true (quiet duplicates).
    */
   dedupe?: boolean
+  /** False keeps it in the in-app inbox only, with no device notification. Default true. */
+  push?: boolean
 }
 
 /** First name, or the email's local part, for use inside a sentence. */
@@ -95,6 +97,8 @@ export async function notify(input: NotifyInput) {
       ? await prisma.trip.findUnique({ where: { id: input.tripId }, select: { name: true } })
       : null
     const pushBody = [trip?.name, input.body].filter(Boolean).join(" · ") || undefined
+
+    if (input.push === false) return
 
     const push = () =>
       sendPush(fresh, {

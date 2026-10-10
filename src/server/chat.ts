@@ -72,7 +72,7 @@ export async function markChatRead(tripId: string): Promise<void> {
       userId: user.id,
       tripId,
       readAt: null,
-      type: { in: ["chat_message", "chat_mention", "trippo_answer", "poll_created", "poll_closed", "itinerary_request", "request_decided"] },
+      type: { in: ["chat_message", "chat_mention", "chat_reply", "trippo_answer", "poll_created", "poll_closed", "itinerary_request", "request_decided"] },
     },
     data: { readAt: new Date() },
   })
@@ -109,7 +109,7 @@ export async function sendChatMessage(
       where: { tripId, status: "ACTIVE" },
       include: { user: { select: { id: true, name: true, email: true } } },
     }),
-    replyToId ? prisma.chatMessage.findFirst({ where: { id: replyToId, tripId }, select: { id: true } }) : Promise.resolve(null),
+    replyToId ? prisma.chatMessage.findFirst({ where: { id: replyToId, tripId }, select: { id: true, authorId: true } }) : Promise.resolve(null),
   ])
   if (!trip) return { ok: false, error: "Trip not found." }
   const mentions = mentionedIds(text, crew.map((c) => ({ id: c.userId, name: displayName(c.user) }))).filter((id) => id !== user.id)
@@ -158,11 +158,7 @@ export async function sendChatMessage(
     }
   }
 
-  // Mentions always reach the device. Plain messages only go to people who aren't looking at the chat.
-  const recently = Date.now() - 25_000
-  const away = crew
-    .filter((c) => c.userId !== user.id && !(c.chatSeenAt && c.chatSeenAt.getTime() > recently))
-    .map((c) => c.userId)
+  // Device notifications from the chat are only for polls, mentions and replies. Plain messages send none.
   const mentioned = mentions
   if (mentioned.length > 0) {
     await notify({
@@ -176,14 +172,16 @@ export async function sendChatMessage(
       url: tripUrl(tripId, "chat"),
     })
   }
-  const rest = away.filter((id) => !mentioned.includes(id))
-  if (rest.length > 0 && !asksTrippo) {
+  // A reply goes to the person being replied to (not Trippo, not yourself, not twice).
+  const repliedTo = replyTarget?.authorId
+  if (repliedTo && repliedTo !== user.id && !mentioned.includes(repliedTo) && crew.some((c) => c.userId === repliedTo)) {
     await notify({
       tripId,
       actorId: user.id,
-      to: { users: rest },
-      type: "chat_message",
-      title: `${personName(user)} in ${trip.name}`,
+      to: { users: [repliedTo] },
+      dedupe: false,
+      type: "chat_reply",
+      title: `${personName(user)} replied to you`,
       body: snippet(text, 120),
       url: tripUrl(tripId, "chat"),
     })
@@ -386,7 +384,7 @@ async function announceChange(
   const crew = await prisma.tripMember.findMany({ where: { tripId, status: "ACTIVE", NOT: { userId: actor.id } }, select: { userId: true } })
   const away = await awayFrom(tripId, crew.map((c) => c.userId))
   if (away.length === 0) return
-  await notify({ tripId, actorId: actor.id, to: { users: away }, type, title, body, url: tripUrl(tripId, "chat") })
+  await notify({ tripId, actorId: actor.id, to: { users: away }, type, title, body, url: tripUrl(tripId, "chat"), push: false })
 }
 
 type AddInput = {
@@ -466,6 +464,7 @@ async function submitAddition(
     tripId: input.tripId,
     actorId: user.id,
     to: { users: await awayFrom(input.tripId, admins.map((a) => a.userId)) },
+    push: false,
     type: "itinerary_request",
     title: `${personName(user)} wants to add ${name}`,
     body: "Approve or decline in the crew chat",
@@ -566,6 +565,7 @@ export async function decideRequest(
       tripId: request.tripId,
       actorId: user.id,
       to: { users: [away] },
+      push: false,
       type: "request_decided",
       title: approve ? `${name} was added to the plan` : `Your request was declined`,
       body: approve ? `Approved by ${me}` : name,

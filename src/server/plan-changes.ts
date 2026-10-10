@@ -18,7 +18,7 @@ type Actor = { id: string; name?: string | null; email?: string | null }
  * Any change to the plan invalidates the group's votes: nobody should stay
  * "approved" on a plan that changed under them.
  */
-export async function afterPlanChange(tripId: string, itineraryId: string, actor: Actor) {
+export async function afterPlanChange(tripId: string, itineraryId: string, actor: Actor, opts?: { push?: boolean }) {
   const cleared = await prisma.approval.deleteMany({ where: { itineraryId } })
   await syncPlanState(tripId)
   if (cleared.count > 0) {
@@ -27,6 +27,7 @@ export async function afterPlanChange(tripId: string, itineraryId: string, actor
       tripId,
       actorId: actor.id,
       to: "voters",
+      push: opts?.push,
       type: "plan_changed",
       title: "The plan changed. Please vote again",
       body: trip?.name,
@@ -209,6 +210,6 @@ export async function addToItinerary(
     await prisma.$transaction(moves.map((m) => prisma.itineraryItem.update({ where: { id: m.id }, data: { order: m.to } })))
   }
 
-  const { votesReset } = await afterPlanChange(tripId, itinerary.id, actor)
+  const { votesReset } = await afterPlanChange(tripId, itinerary.id, actor, { push: false })
   return { ok: true, mode: "added", dayNumber: day.dayNumber, title: f.title, votesReset }
 }

@@ -18,6 +18,7 @@ export type NotificationType =
   | "stay_chosen"
   | "chat_message"
   | "chat_mention"
+  | "chat_reply"
   | "trippo_answer"
   | "itinerary_request"
   | "request_decided"
@@ -42,6 +43,7 @@ export const NOTIFICATION_ICONS: Record<NotificationType, string> = {
   stay_chosen: "bed",
   chat_message: "chat",
   chat_mention: "chat",
+  chat_reply: "chat",
   trippo_answer: "sparkles",
   itinerary_request: "list",
   request_decided: "check",
