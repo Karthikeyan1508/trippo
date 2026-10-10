@@ -64,8 +64,8 @@ export function ApprovalControls({
         variant={myStatus === "APPROVED" ? "outline" : "default"}
         className={
           myStatus === "APPROVED"
-            ? "flex-1 gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 disabled:opacity-100 dark:text-emerald-400 dark:hover:text-emerald-400"
-            : "flex-1 gap-1.5"
+            ? "gap-1.5 sm:flex-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/15 hover:text-emerald-600 disabled:opacity-100 dark:text-emerald-400 dark:hover:text-emerald-400"
+            : "gap-1.5 sm:flex-1"
         }
       >
         {pending ? (
@@ -80,7 +80,7 @@ export function ApprovalControls({
         <DialogTrigger asChild>
           <Button
             variant={myStatus === "REJECTED" ? "destructive" : "outline"}
-            className="flex-1 gap-1.5"
+            className="gap-1.5 sm:flex-1"
             disabled={pending}
           >
             <X className="size-4" />
