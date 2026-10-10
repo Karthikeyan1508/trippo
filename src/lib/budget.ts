@@ -2,6 +2,11 @@ export type Transfer = { from: string; to: string; amount: number }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
+/** Converts one expense into the trip's single settlement currency. */
+export function convertAtRate(localAmount: number, rate: number) {
+  return round2(localAmount * rate)
+}
+
 /**
  * Net balance per user: positive = they are owed money, negative = they owe.
  * balance = (expenses they paid) - (their shares) + (settlements they paid) - (settlements they received)
