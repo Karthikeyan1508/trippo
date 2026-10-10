@@ -11,6 +11,10 @@ export type BudgetExpense = {
   id: string
   description: string
   amount: number
+  localAmount: number | null
+  localCurrency: string | null
+  exchangeRate: number | null
+  exchangeRateAsOf: string | null
   category: string
   paidById: string
   createdById: string | null
@@ -197,6 +201,11 @@ export function BudgetTab({
                       {e.splitType === "EQUAL" ? "split equally" : "custom split"} ·{" "}
                       {e.shareCount} {e.shareCount === 1 ? "person" : "people"}
                     </p>
+                    {e.localAmount != null && e.localCurrency && e.localCurrency !== currency && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Spent {formatMoney(e.localAmount, e.localCurrency)} · converted at {e.exchangeRate?.toFixed(4)}
+                      </p>
+                    )}
                     {e.pendingEdit && (
                       <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                         {viewerIsAdmin
