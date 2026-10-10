@@ -494,6 +494,12 @@ model Expense {
   tripId      String
   description String
   amount      Float
+  // The amount paid at the destination. `amount` stays in the trip's
+  // settlement currency so balances always use one currency.
+  localAmount Float?
+  localCurrency String?
+  exchangeRate Float?
+  exchangeRateAsOf String?
   category    ExpenseCategory @default(MISC)
   paidById    String
   splitType   SplitType       @default(EQUAL)
@@ -515,6 +521,10 @@ model ExpenseEdit {
   requestedById String
   description String
   amount      Float
+  localAmount Float?
+  localCurrency String?
+  exchangeRate Float?
+  exchangeRateAsOf String?
   category    ExpenseCategory
   paidById    String
   splitType   SplitType

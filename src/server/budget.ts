@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache"
 
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
-import { splitEqual } from "@/lib/budget"
+import { convertAtRate, splitEqual } from "@/lib/budget"
 import { formatMoney } from "@/lib/format"
 import { notify, personName } from "@/server/notify"
 import { tripUrl } from "@/lib/notifications"
+import { convertCurrency } from "@/server/serpapi"
 
 type ExpenseCategoryT =
   | "FOOD"
@@ -17,7 +18,7 @@ type ExpenseCategoryT =
   | "SHOPPING"
   | "MISC"
 type SplitTypeT = "EQUAL" | "CUSTOM"
-type ActionResult = { ok: true } | { ok: false; error: string }
+type ActionResult<T = undefined> = T extends undefined ? { ok: true } | { ok: false; error: string } : { ok: true; data: T } | { ok: false; error: string }
 
 export type AddExpenseInput = {
   description: string
@@ -26,6 +27,10 @@ export type AddExpenseInput = {
   paidById: string
   splitType: SplitTypeT
   customShares?: { userId: string; amount: number }[]
+  localAmount: number
+  localCurrency: string
+  exchangeRate: number
+  exchangeRateAsOf?: string
 }
 
 type ValidExpense = Omit<AddExpenseInput, "customShares"> & {
@@ -34,12 +39,20 @@ type ValidExpense = Omit<AddExpenseInput, "customShares"> & {
 
 function validateExpense(
   input: AddExpenseInput,
-  members: { userId: string; role: string }[]
+  members: { userId: string; role: string }[],
+  tripCurrency: string
 ): ValidExpense | { error: string } {
   const description = input.description?.trim().slice(0, 120)
   if (!description) return { error: "Add a description." }
-  const amount = Math.round(Number(input.amount) * 100) / 100
-  if (!Number.isFinite(amount) || amount <= 0) return { error: "Enter a valid amount." }
+  const localAmount = Math.round(Number(input.localAmount) * 100) / 100
+  const localCurrency = input.localCurrency.trim().toUpperCase()
+  const exchangeRate = Number(input.exchangeRate)
+  if (!Number.isFinite(localAmount) || localAmount <= 0) return { error: "Enter a valid local amount." }
+  if (!/^[A-Z]{3}$/.test(localCurrency)) return { error: "Use a 3-letter currency code." }
+  if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) return { error: "Convert the amount before splitting it." }
+  if (localCurrency === tripCurrency && exchangeRate !== 1) return { error: "The trip currency must use a 1:1 rate." }
+  const amount = convertAtRate(localAmount, exchangeRate)
+  if (Math.abs(Number(input.amount) - amount) > 0.01) return { error: "The converted total has changed. Convert it again." }
   if (!(["FOOD", "STAY", "TRANSPORT", "ACTIVITY", "SHOPPING", "MISC"] as string[]).includes(input.category)) {
     return { error: "Choose a valid category." }
   }
@@ -58,7 +71,30 @@ function validateExpense(
   if (Math.abs(sum - amount) > 0.5) {
     return { error: `Custom shares add up to ${sum}, but the total is ${amount}.` }
   }
-  return { description, amount, category: input.category, paidById: input.paidById, splitType: input.splitType, shares }
+  return {
+    description, amount, category: input.category, paidById: input.paidById, splitType: input.splitType, shares,
+    localAmount, localCurrency, exchangeRate, exchangeRateAsOf: input.exchangeRateAsOf,
+  }
+}
+
+export async function convertExpenseAmount(
+  tripId: string,
+  localAmount: number,
+  localCurrency: string
+): Promise<ActionResult<{ amount: number; rate: number; asOf?: string }>> {
+  const user = await requireUser()
+  const trip = await prisma.trip.findUnique({ where: { id: tripId }, include: { members: true } })
+  if (!trip) return { ok: false, error: "Trip not found." }
+  if (!trip.members.some((m) => m.userId === user.id && m.role !== "OBSERVER")) return { ok: false, error: "Not allowed." }
+  const amount = Math.round(Number(localAmount) * 100) / 100
+  const from = localCurrency.trim().toUpperCase()
+  if (!Number.isFinite(amount) || amount <= 0 || !/^[A-Z]{3}$/.test(from)) {
+    return { ok: false, error: "Enter an amount and a 3-letter currency code." }
+  }
+  if (from === trip.currency) return { ok: true, data: { amount, rate: 1 } }
+  const converted = await convertCurrency(tripId, amount, from, trip.currency)
+  if (!converted) return { ok: false, error: "We couldn't get a live exchange rate. Try again shortly." }
+  return { ok: true, data: { amount: converted.converted, rate: converted.converted / amount, asOf: converted.asOf } }
 }
 
 export async function addExpense(
@@ -74,66 +110,33 @@ export async function addExpense(
   const me = trip.members.find((m) => m.userId === user.id)
   if (!me) return { ok: false, error: "You're not a member of this trip." }
 
-  const description = input.description?.trim().slice(0, 120)
-  if (!description) return { ok: false, error: "Add a description." }
-
-  const amount = Math.round(Number(input.amount) * 100) / 100
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, error: "Enter a valid amount." }
-  }
-
-  // Observers follow the trip but don't share its costs.
-  const memberIds = trip.members
-    .filter((m) => m.role !== "OBSERVER")
-    .map((m) => m.userId)
-  if (!memberIds.includes(input.paidById)) {
-    return { ok: false, error: "The payer must be a travelling member." }
-  }
-
-  let shares: { userId: string; amount: number }[]
-  if (input.splitType === "CUSTOM") {
-    const cs = (input.customShares ?? [])
-      .filter((s) => memberIds.includes(s.userId) && Number(s.amount) > 0)
-      .map((s) => ({
-        userId: s.userId,
-        amount: Math.round(Number(s.amount) * 100) / 100,
-      }))
-    if (cs.length === 0) {
-      return { ok: false, error: "Add at least one person's share." }
-    }
-    const sum = cs.reduce((a, b) => a + b.amount, 0)
-    if (Math.abs(sum - amount) > 0.5) {
-      return {
-        ok: false,
-        error: `Custom shares add up to ${sum}, but the total is ${amount}.`,
-      }
-    }
-    shares = cs
-  } else {
-    const split = splitEqual(amount, memberIds)
-    shares = memberIds.map((u) => ({ userId: u, amount: split[u] }))
-  }
+  const expense = validateExpense(input, trip.members, trip.currency)
+  if ("error" in expense) return { ok: false, error: expense.error }
 
   await prisma.expense.create({
     data: {
       tripId,
-      description,
-      amount,
-      category: input.category as ExpenseCategoryT,
-      paidById: input.paidById,
-      splitType: input.splitType as SplitTypeT,
+      description: expense.description,
+      amount: expense.amount,
+      localAmount: expense.localAmount,
+      localCurrency: expense.localCurrency,
+      exchangeRate: expense.exchangeRate,
+      exchangeRateAsOf: expense.exchangeRateAsOf ?? null,
+      category: expense.category as ExpenseCategoryT,
+      paidById: expense.paidById,
+      splitType: expense.splitType as SplitTypeT,
       createdById: user.id,
-      shares: { create: shares },
+      shares: { create: expense.shares },
     },
   })
 
   await notify({
     tripId,
     actorId: user.id,
-    to: { users: shares.map((s) => s.userId) },
+    to: { users: expense.shares.map((s) => s.userId) },
     type: "expense_added",
     title: `${personName(user)} added an expense`,
-    body: `${description} · ${formatMoney(amount, trip.currency)}`,
+    body: `${expense.description} · ${formatMoney(expense.amount, trip.currency)}`,
     url: tripUrl(tripId, "budget"),
   })
 
@@ -174,7 +177,7 @@ export async function requestExpenseEdit(
   if (expense.createdById !== user.id) {
     return { ok: false, error: "Only the person who added this expense can edit it." }
   }
-  const proposed = validateExpense(input, expense.trip.members)
+  const proposed = validateExpense(input, expense.trip.members, expense.trip.currency)
   if ("error" in proposed) return { ok: false, error: proposed.error }
   const pending = await prisma.expenseEdit.findFirst({
     where: { expenseId, status: "PENDING" },
@@ -188,6 +191,10 @@ export async function requestExpenseEdit(
       requestedById: user.id,
       description: proposed.description,
       amount: proposed.amount,
+      localAmount: proposed.localAmount,
+      localCurrency: proposed.localCurrency,
+      exchangeRate: proposed.exchangeRate,
+      exchangeRateAsOf: proposed.exchangeRateAsOf ?? null,
       category: proposed.category,
       paidById: proposed.paidById,
       splitType: proposed.splitType,
@@ -228,6 +235,10 @@ export async function reviewExpenseEdit(
       {
         description: edit.description,
         amount: edit.amount,
+        localAmount: edit.localAmount ?? edit.amount,
+        localCurrency: edit.localCurrency ?? edit.expense.trip.currency,
+        exchangeRate: edit.exchangeRate ?? 1,
+        exchangeRateAsOf: edit.exchangeRateAsOf ?? undefined,
         category: edit.category,
         paidById: edit.paidById,
         splitType: edit.splitType,
@@ -238,7 +249,8 @@ export async function reviewExpenseEdit(
             typeof (share as { amount?: unknown }).amount === "number"
         ) as { userId: string; amount: number }[],
       },
-      edit.expense.trip.members
+      edit.expense.trip.members,
+      edit.expense.trip.currency
     )
     if ("error" in proposed) return { ok: false, error: `This edit can no longer be approved: ${proposed.error}` }
     await prisma.$transaction([
@@ -247,6 +259,10 @@ export async function reviewExpenseEdit(
         data: {
           description: proposed.description,
           amount: proposed.amount,
+          localAmount: proposed.localAmount,
+          localCurrency: proposed.localCurrency,
+          exchangeRate: proposed.exchangeRate,
+          exchangeRateAsOf: proposed.exchangeRateAsOf ?? null,
           category: proposed.category,
           paidById: proposed.paidById,
           splitType: proposed.splitType,

@@ -6,7 +6,7 @@ import { Plus, Pencil, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
-import { addExpense, requestExpenseEdit } from "@/server/budget"
+import { addExpense, convertExpenseAmount, requestExpenseEdit } from "@/server/budget"
 import { EXPENSE_ICONS, EXPENSE_LABELS } from "./expense-icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,6 +39,10 @@ type ExistingExpense = {
   paidById: string
   splitType: string
   shares: { userId: string; amount: number }[]
+  localAmount: number | null
+  localCurrency: string | null
+  exchangeRate: number | null
+  exchangeRateAsOf: string | null
 }
 
 export function AddExpenseDialog({
@@ -58,9 +62,14 @@ export function AddExpenseDialog({
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [pending, startTransition] = React.useTransition()
+  const [converting, startConverting] = React.useTransition()
 
   const [description, setDescription] = React.useState(expense?.description ?? "")
   const [amount, setAmount] = React.useState(expense ? String(expense.amount) : "")
+  const [localAmount, setLocalAmount] = React.useState(expense?.localAmount != null ? String(expense.localAmount) : expense ? String(expense.amount) : "")
+  const [localCurrency, setLocalCurrency] = React.useState(expense?.localCurrency ?? currency)
+  const [exchangeRate, setExchangeRate] = React.useState(expense?.exchangeRate ?? 1)
+  const [exchangeRateAsOf, setExchangeRateAsOf] = React.useState(expense?.exchangeRateAsOf ?? "")
   const [category, setCategory] = React.useState(expense?.category ?? "FOOD")
   const [paidById, setPaidById] = React.useState(expense?.paidById ?? currentUserId)
   const [splitType, setSplitType] = React.useState<"EQUAL" | "CUSTOM">(
@@ -80,10 +89,40 @@ export function AddExpenseDialog({
   function reset() {
     setDescription(expense?.description ?? "")
     setAmount(expense ? String(expense.amount) : "")
+    setLocalAmount(expense?.localAmount != null ? String(expense.localAmount) : expense ? String(expense.amount) : "")
+    setLocalCurrency(expense?.localCurrency ?? currency)
+    setExchangeRate(expense?.exchangeRate ?? 1)
+    setExchangeRateAsOf(expense?.exchangeRateAsOf ?? "")
     setCategory(expense?.category ?? "FOOD")
     setPaidById(expense?.paidById ?? currentUserId)
     setSplitType(expense?.splitType === "CUSTOM" ? "CUSTOM" : "EQUAL")
     setCustom(Object.fromEntries(expense?.shares.map((share) => [share.userId, String(share.amount)]) ?? []))
+  }
+
+  function updateLocalAmount(value: string) {
+    setLocalAmount(value)
+    if (localCurrency === currency) {
+      setAmount(value)
+      setExchangeRate(1)
+      setExchangeRateAsOf("")
+    } else {
+      setAmount("")
+      setExchangeRate(0)
+      setExchangeRateAsOf("")
+    }
+  }
+
+  function convert() {
+    startConverting(async () => {
+      const res = await convertExpenseAmount(tripId, Number(localAmount), localCurrency)
+      if (!res.ok) {
+        toast.error(res.error)
+        return
+      }
+      setAmount(String(res.data.amount))
+      setExchangeRate(res.data.rate)
+      setExchangeRateAsOf(res.data.asOf ?? "")
+    })
   }
 
   function submit() {
@@ -91,6 +130,10 @@ export function AddExpenseDialog({
       const input = {
         description,
         amount: Number(amount),
+        localAmount: Number(localAmount),
+        localCurrency,
+        exchangeRate,
+        exchangeRateAsOf: exchangeRateAsOf || undefined,
         category: category as "FOOD",
         paidById,
         splitType,
@@ -146,15 +189,43 @@ export function AddExpenseDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Amount ({currency})</Label>
+              <Label>Spent locally</Label>
               <Input
                 type="number"
                 min={0}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                value={localAmount}
+                onChange={(e) => updateLocalAmount(e.target.value)}
                 placeholder="0"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label>Local currency</Label>
+              <Input
+                value={localCurrency}
+                maxLength={3}
+                onChange={(e) => {
+                  const next = e.target.value.toUpperCase()
+                  setLocalCurrency(next)
+                  setAmount(next === currency ? localAmount : "")
+                  setExchangeRate(next === currency ? 1 : 0)
+                  setExchangeRateAsOf("")
+                }}
+                placeholder="THB"
+              />
+            </div>
+          </div>
+          <div className="flex items-end gap-3 rounded-lg border p-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground">Split total ({currency})</p>
+              <p className="font-medium tabular-nums">{amount ? `${currency} ${Number(amount).toFixed(2)}` : "Convert local amount first"}</p>
+              {exchangeRateAsOf && <p className="truncate text-xs text-muted-foreground">Rate captured {exchangeRateAsOf}</p>}
+            </div>
+            <Button type="button" variant="outline" onClick={convert} disabled={converting || !localAmount || localCurrency === currency}>
+              {converting && <Loader2 className="size-4 animate-spin" />}
+              Convert
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Category</Label>
               <Select value={category} onValueChange={setCategory}>
@@ -263,7 +334,7 @@ export function AddExpenseDialog({
         </div>
 
         <DialogFooter>
-          <Button onClick={submit} disabled={pending} className="gap-2">
+          <Button onClick={submit} disabled={pending || converting || !amount || !exchangeRate} className="gap-2">
             {pending && <Loader2 className="size-4 animate-spin" />}
             {isEdit ? "Send for approval" : "Add expense"}
           </Button>
