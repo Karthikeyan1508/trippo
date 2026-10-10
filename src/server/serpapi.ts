@@ -727,3 +727,41 @@ export async function convertCurrency(
   if (box?.type !== "currency_converter" || converted === undefined) return null
   return { amount, from: clean(from), to: clean(to), converted: Math.round(converted * 100) / 100, asOf: box.date }
 }
+
+
+export type YoutubeResult = {
+  videoId: string
+  title: string
+  channel: string
+  length?: string
+  views?: number
+  published?: string
+  description: string
+  link: string
+  thumbnail: string
+  live: boolean
+}
+
+/** A YouTube search through SerpApi's `youtube` engine, reduced to the fields the chat uses. */
+export async function searchYoutube(tripId: string, query: string, gl = "us"): Promise<YoutubeResult[]> {
+  const json = await serpFetch(tripId, "youtube", { search_query: query, gl, hl: "en" }, 7)
+  return ((json?.video_results as any[]) ?? [])
+    .map((v): YoutubeResult | null => {
+      const link = safeHttpUrl(v.link)
+      const thumbnail = safeHttpUrl(v.thumbnail?.static ?? v.thumbnail)
+      if (!v.video_id || !link || !thumbnail || !v.title) return null
+      return {
+        videoId: String(v.video_id),
+        title: String(v.title),
+        channel: String(v.channel?.name ?? ""),
+        length: typeof v.length === "string" ? v.length : undefined,
+        views: typeof v.views === "number" ? v.views : undefined,
+        published: typeof v.published_date === "string" ? v.published_date : undefined,
+        description: String(v.description ?? "").slice(0, 300),
+        link,
+        thumbnail,
+        live: Boolean(v.live) || /^live/i.test(String(v.length ?? "")) || (v.extensions ?? []).includes?.("LIVE"),
+      }
+    })
+    .filter((v): v is YoutubeResult => v !== null)
+}

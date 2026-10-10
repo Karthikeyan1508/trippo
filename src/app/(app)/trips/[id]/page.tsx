@@ -291,6 +291,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
       ? `@trippo how do we get from ${legs[0].placeName ?? legs[0].title} to ${legs[1].placeName ?? legs[1].title}?`
       : `@trippo how do we get around ${trip.destination}?`,
     anchor ? `@trippo best local food near ${anchor}` : `@trippo best local food in ${trip.destination}`,
+    `@trippo suggest YouTube videos for our itinerary`,
   ]
 
   const invite = {

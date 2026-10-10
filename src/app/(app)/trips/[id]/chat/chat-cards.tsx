@@ -15,12 +15,14 @@ import {
   MapPinned,
   Navigation,
   Plane,
+  Play,
   Plus,
   Route as RouteIcon,
   Ship,
   Star,
   TrainFront,
   Vote,
+  Video,
   type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -37,6 +39,8 @@ import {
   type TransportCard,
   type TransportItem,
   type TransportMode,
+  type VideoItem,
+  type VideosCard,
 } from "@/lib/chat"
 import { addCardToPlan, startCardPoll } from "@/server/chat"
 import { Button } from "@/components/ui/button"
@@ -656,6 +660,72 @@ function PlacesCardView({ card, messageId, states }: { card: PlacesCard; message
   )
 }
 
+// ── Videos ──────────────────────────────────────────────────────────────
+
+const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 })
+
+/** A video from the search. Plays right here (YouTube's privacy-friendly player) on a click. */
+function VideoTile({ item }: { item: VideoItem }) {
+  const [playing, setPlaying] = React.useState(false)
+  return (
+    <article className={TILE}>
+      <div className="relative aspect-video overflow-hidden bg-muted">
+        {playing ? (
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(item.videoId)}?autoplay=1&rel=0`}
+            title={item.title}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            className="absolute inset-0 size-full"
+          />
+        ) : (
+          <button type="button" onClick={() => setPlaying(true)} className="group absolute inset-0 block size-full" aria-label={`Play ${item.title}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={item.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" className="absolute inset-0 size-full object-cover" />
+            <span className="absolute inset-0 grid place-items-center bg-black/20 transition-colors group-hover:bg-black/35">
+              <span className="grid size-11 place-items-center bg-primary text-primary-foreground shadow-lg">
+                <Play className="size-5 translate-x-px" fill="currentColor" />
+              </span>
+            </span>
+            {item.length && <span className="absolute right-1.5 bottom-1.5 bg-black/80 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">{item.length}</span>}
+          </button>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <h4 className="line-clamp-2 text-sm leading-snug font-semibold">{item.title}</h4>
+        <p className="text-xs text-muted-foreground">
+          {[item.channel, item.views !== undefined ? `${compact.format(item.views)} views` : null, item.published].filter(Boolean).join(" · ")}
+        </p>
+        <p className="mt-auto flex items-start gap-1.5 border-l-2 border-primary pl-2 text-xs leading-relaxed">
+          <MapPinned className="mt-0.5 size-3 shrink-0 text-brand" />
+          <span>About {item.forStop}</span>
+        </p>
+        <a
+          href={item.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          <ExternalLink className="size-3" />
+          Open on YouTube
+        </a>
+      </div>
+    </article>
+  )
+}
+
+function VideosCardView({ card }: { card: VideosCard }) {
+  return (
+    <CardShell icon={Video} className={shellWidth(card.items.length)} title={card.title} meta="Matched to the stops in your plan">
+      <Tiles count={card.items.length}>
+        {card.items.map((item) => (
+          <VideoTile key={item.key} item={item} />
+        ))}
+      </Tiles>
+    </CardShell>
+  )
+}
+
 // ── Entry point ─────────────────────────────────────────────────────────
 
 export function AiCards({ cards, messageId, states }: { cards: ChatCard[]; messageId: string; states: States }) {
@@ -666,6 +736,8 @@ export function AiCards({ cards, messageId, states }: { cards: ChatCard[]; messa
           <HotelsCardView key={card.id} card={card} messageId={messageId} states={states} />
         ) : card.type === "transport" ? (
           <TransportCardView key={card.id} card={card} messageId={messageId} states={states} />
+        ) : card.type === "videos" ? (
+          <VideosCardView key={card.id} card={card} />
         ) : (
           <PlacesCardView key={card.id} card={card} messageId={messageId} states={states} />
         )

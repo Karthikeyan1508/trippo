@@ -7,7 +7,9 @@ import {
   fetchDirections,
   searchHotelsNear,
   searchPlacesNear,
+  searchYoutube,
   webSearch,
+  type YoutubeResult,
   type DirectionsOption,
 } from "@/server/serpapi"
 import {
@@ -15,6 +17,7 @@ import {
   type HotelItem,
   type PlaceItem,
   type TransportItem,
+  type VideoItem,
 } from "@/lib/chat"
 
 /**
@@ -33,12 +36,15 @@ export type ToolContext = {
   endDate: string
   currency: string
   crewSize: number
+  /** The plan's places in order (names only), so videos can be matched to what the crew will visit. */
+  stops: string[]
 }
 
 export type Registry = {
   hotels: Map<string, HotelItem>
   transports: Map<string, TransportItem>
   places: Map<string, PlaceItem>
+  videos: Map<string, VideoItem>
   /** What was searched, for card headers. */
   hotelArea?: string
   hotelStay?: { checkIn: string; checkOut: string; nights: number; guests: number }
@@ -47,7 +53,7 @@ export type Registry = {
 }
 
 export function newRegistry(): Registry {
-  return { hotels: new Map(), transports: new Map(), places: new Map() }
+  return { hotels: new Map(), transports: new Map(), places: new Map(), videos: new Map() }
 }
 
 const COUNTRY_INFO: Record<string, { gl: string; currency: string }> = {
@@ -373,5 +379,137 @@ export async function toolWebSearch(ctx: ToolContext, args: { query?: string }) 
   return {
     answer: result.answer,
     results: result.results.slice(0, 4).map((r) => `${r.title}: ${r.snippet}`.slice(0, 230)),
+  }
+}
+
+
+// ── Videos ─────────────────────────────────────────────────────────────
+
+const STOPWORDS = new Set(["the", "a", "an", "of", "at", "in", "on", "to", "and", "for", "near", "visit", "stop", "day"])
+/** "Dinner at Koko Beach Club" is about Koko Beach Club: lose the part that is the schedule's wording. */
+const SCHEDULE_PREFIX = /^(check in at|check-in at|check out of|breakfast at|lunch at|dinner at|brunch at|coffee at|visit to|visit|explore|stay at|free time at|arrive at|drive to|walk to)\s+/i
+
+const words = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 2 && !STOPWORDS.has(w))
+
+const cleanTopic = (name: string) => name.replace(SCHEDULE_PREFIX, "").replace(/\s*[(,].*$/, "").trim()
+
+/** "11:51" or "1:02:10" to minutes. */
+function minutesOf(length?: string): number | undefined {
+  if (!length) return undefined
+  const parts = length.split(":").map(Number)
+  if (parts.some((n) => !Number.isFinite(n))) return undefined
+  return parts.length === 3 ? parts[0] * 60 + parts[1] + parts[2] / 60 : parts.length === 2 ? parts[0] + parts[1] / 60 : undefined
+}
+
+/** "2y ago" style ages, in years. */
+function yearsOf(published?: string): number | undefined {
+  const m = published?.match(/(\d+)\s*(hour|day|week|month|year|y|mo|w|d|h)/i)
+  if (!m) return undefined
+  const n = Number(m[1])
+  const unit = m[2].toLowerCase()
+  if (unit.startsWith("y")) return n
+  if (unit === "mo" || unit.startsWith("month")) return n / 12
+  return 0
+}
+
+/**
+ * How well one video is about one stop. Everything comes from the video's own title and
+ * description: a video only counts if it names the place (most of its distinctive words) and
+ * the destination. Length, age and views then rank the ones that qualify. Returns null to reject.
+ */
+function scoreVideo(video: YoutubeResult, topic: string, destinationWords: string[]): { score: number; match: string } | null {
+  if (video.live || /\/shorts\//.test(video.link)) return null
+  const minutes = minutesOf(video.length)
+  if (minutes !== undefined && minutes < 2) return null
+
+  const need = [...new Set(words(topic).filter((w) => !destinationWords.includes(w)))]
+  if (need.length === 0) return null
+  const title = new Set(words(`${video.title} ${video.channel}`))
+  const desc = new Set(words(video.description))
+  const inTitle = need.filter((w) => title.has(w)).length / need.length
+  const inDesc = need.filter((w) => title.has(w) || desc.has(w)).length / need.length
+  // The place has to be named in the title: a passing mention in a long guide's description is not a video about it.
+  if (inTitle < 0.67) return null
+  // Almost nobody has watched it: too little signal that it is any good.
+  if ((video.views ?? 0) < 200) return null
+  const named = destinationWords.filter((w) => title.has(w) || desc.has(w))
+  // Same-named places exist elsewhere: it must also be about this destination.
+  if (destinationWords.length > 0 && named.length === 0) return null
+  // Compilations and reactions are about everything and nothing.
+  if (/reaction|top \d{2,}|\b\d{2,} (best|places)|giveaway|podcast|full movie/i.test(video.title)) return null
+
+  const years = yearsOf(video.published)
+  const age = years === undefined ? 0 : years <= 1 ? 0.35 : years <= 3 ? 0.2 : years <= 6 ? 0.05 : -0.35
+  const length = minutes === undefined ? 0 : minutes >= 3 && minutes <= 25 ? 0.6 : minutes <= 45 ? 0.2 : minutes > 90 ? -0.6 : -0.2
+  const reach = Math.min(0.7, Math.log10((video.views ?? 0) + 10) / 8)
+  const score = 3 * inTitle + inDesc + 0.7 * (named.length / Math.max(1, destinationWords.length)) + age + length + reach
+  const matched = need.filter((w) => title.has(w) || desc.has(w))
+  return { score, match: `Names ${matched.join(" ")}${named.length ? ` in ${named.join(" ")}` : ""}` }
+}
+
+/** Evenly spread picks from the plan's stops: the first, the last, and what sits between. */
+function spreadStops(stops: string[], count: number) {
+  const unique = [...new Set(stops.map(cleanTopic).filter((t) => words(t).length > 0))]
+  if (unique.length <= count) return unique
+  return Array.from({ length: count }, (_, i) => unique[Math.round((i * (unique.length - 1)) / (count - 1))])
+}
+
+export async function toolSearchVideos(ctx: ToolContext, reg: Registry, args: { topics?: string[] }) {
+  const asked = (Array.isArray(args.topics) ? args.topics : []).map((t) => cleanTopic(String(t).slice(0, 80))).filter((t) => words(t).length > 0)
+  const topics = (asked.length > 0 ? asked : spreadStops(ctx.stops, 3)).slice(0, 3)
+  const destinationWords = [...new Set(words(ctx.destination))]
+  const gl = countryInfo(ctx.destination).gl
+  // With no stops to go on, the destination itself is the topic.
+  const queries =
+    topics.length > 0
+      ? topics.map((topic) => ({ topic, q: `${topic} ${ctx.destination} travel`, dest: destinationWords }))
+      : [{ topic: ctx.destination, q: `${ctx.destination} travel guide`, dest: [] as string[] }]
+
+  const results = await Promise.all(queries.map(async (query) => ({ ...query, videos: await searchYoutube(ctx.tripId, query.q, gl) })))
+
+  const picked: { video: YoutubeResult; topic: string; score: number; match: string }[] = []
+  const seen = new Set<string>()
+  const perChannel = new Map<string, number>()
+  for (const { topic, dest, videos } of results) {
+    const scored = videos
+      .map((video) => ({ video, ...(scoreVideo(video, topic, dest) ?? { score: -1, match: "" }) }))
+      .filter((v) => v.score > 0)
+      .sort((a, b) => b.score - a.score)
+    let taken = 0
+    for (const v of scored) {
+      if (taken >= 2 || seen.has(v.video.videoId) || (perChannel.get(v.video.channel) ?? 0) >= 2) continue
+      seen.add(v.video.videoId)
+      perChannel.set(v.video.channel, (perChannel.get(v.video.channel) ?? 0) + 1)
+      picked.push({ ...v, topic })
+      taken++
+    }
+  }
+  if (picked.length === 0) return { videos: [], note: "No video clearly about these stops was found." }
+
+  const base = reg.videos.size
+  return {
+    videos: picked.slice(0, 6).map((p, i) => {
+      const key = `v${base + i + 1}`
+      reg.videos.set(key, {
+        key,
+        videoId: p.video.videoId,
+        title: p.video.title,
+        channel: p.video.channel,
+        length: p.video.length,
+        views: p.video.views,
+        published: p.video.published,
+        link: p.video.link,
+        thumbnail: p.video.thumbnail,
+        forStop: p.topic,
+        match: p.match,
+      })
+      return { id: key, title: p.video.title.slice(0, 90), channel: p.video.channel, about: p.topic, min: Math.round(minutesOf(p.video.length) ?? 0) }
+    }),
   }
 }

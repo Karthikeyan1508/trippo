@@ -132,6 +132,10 @@ thread with live data instead of guesses:
   and a currency conversion. The fastest option is worked out in code, not by the model.
 - **Places and food**: `google_maps` search around a stop. **Anything else**: a web search,
   summed up in a few sentences.
+- **Videos**: `youtube` search for the stops in the plan. A video is only shown if its title
+  names the stop and the destination; live streams, Shorts, compilations and almost-unwatched
+  videos are dropped, then length, age and views rank what is left. Each card says which stop it
+  is about, and plays in the chat.
 
 Every card can go two ways:
 

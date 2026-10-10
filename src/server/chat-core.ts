@@ -368,6 +368,17 @@ export async function touchPresence(
 
 // ── Trippo ──────────────────────────────────────────────────────────────
 
+/** The places the crew will actually visit, in order: what videos are matched against. */
+async function itineraryStops(tripId: string): Promise<string[]> {
+  const items = await prisma.itineraryItem.findMany({
+    where: { day: { itinerary: { tripId } }, category: { in: ["ACTIVITY", "FOOD"] } },
+    orderBy: [{ day: { dayNumber: "asc" } }, { order: "asc" }],
+    select: { title: true, placeName: true },
+    take: 60,
+  })
+  return [...new Set(items.map((i) => (i.placeName || i.title).trim()).filter(Boolean))]
+}
+
 async function itineraryDigest(tripId: string): Promise<string> {
   const plan = await prisma.itinerary.findFirst({
     where: { tripId },
@@ -400,7 +411,7 @@ export async function runTrippoForMessage(aiMessageId: string) {
   const finish = async (data: Prisma.ChatMessageUpdateInput) => prisma.chatMessage.update({ where: { id: aiMessageId }, data })
 
   try {
-    const [trip, members, asker, stay, recent, digest] = await Promise.all([
+    const [trip, members, asker, stay, recent, digest, stops] = await Promise.all([
       prisma.trip.findUnique({ where: { id: tripId } }),
       prisma.tripMember.findMany({ where: { tripId }, include: { preference: true } }),
       prisma.user.findUnique({ where: { id: payload.askedById }, select: { name: true, email: true } }),
@@ -412,6 +423,7 @@ export async function runTrippoForMessage(aiMessageId: string) {
         include: { author: { select: { name: true, email: true } } },
       }),
       itineraryDigest(tripId),
+      itineraryStops(tripId),
     ])
     if (!trip) return
 
@@ -438,6 +450,7 @@ export async function runTrippoForMessage(aiMessageId: string) {
         interests: tally(prefs.flatMap((p) => p.interests)).slice(0, 5),
         budgetPerPerson: trip.budgetPerPerson,
         itineraryDigest: digest,
+        stops,
         chosenStay: stay?.name ?? null,
         recent: recent
           .reverse()

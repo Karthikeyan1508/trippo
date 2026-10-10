@@ -85,6 +85,25 @@ export type PlaceItem = {
   distanceKm?: number
 }
 
+export type VideoItem = {
+  key: string
+  /** YouTube's own id: the thumbnail and the player come from it. */
+  videoId: string
+  title: string
+  channel: string
+  /** "12:30" as YouTube shows it. */
+  length?: string
+  views?: number
+  /** "2y ago". */
+  published?: string
+  link: string
+  thumbnail: string
+  /** The stop in the plan this video is about. */
+  forStop: string
+  /** Why it matches, worked out from the video's own title and description. */
+  match: string
+}
+
 export type HotelsCard = {
   id: string
   type: "hotels"
@@ -105,9 +124,11 @@ export type TransportCard = {
 }
 export type PlacesCard = { id: string; type: "places"; title: string; area?: string; items: PlaceItem[] }
 
-export type ChatCard = HotelsCard | TransportCard | PlacesCard
+export type VideosCard = { id: string; type: "videos"; title: string; items: VideoItem[] }
 
-export type CardItem = HotelItem | TransportItem | PlaceItem
+export type ChatCard = HotelsCard | TransportCard | PlacesCard | VideosCard
+
+export type CardItem = HotelItem | TransportItem | PlaceItem | VideoItem
 
 export type AiStep = { label: string; done: boolean }
 
