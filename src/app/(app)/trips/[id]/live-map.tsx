@@ -250,7 +250,7 @@ export function LiveMap({
       if (m.lat === null || m.lng === null) continue
       const off = m.status !== "live"
       const inner = m.image
-        ? `<img src="${escapeHtml(m.image)}" alt="" />`
+        ? `<span class="tp-pin-photo"><img src="${escapeHtml(m.image)}" alt="" /></span>`
         : `<span>${initials(m.name, m.userId)}</span>`
       const html = `<div class="tp-pin ${m.isMe ? "tp-pin-me" : ""} ${off ? "tp-pin-off" : ""}">${inner}</div>`
       const icon = L.divIcon({
@@ -373,9 +373,9 @@ export function LiveMap({
   return (
     <div className="space-y-4">
       <style>{`
-        .tp-pin{width:40px;height:40px;border-radius:0;overflow:hidden;border:3px solid #10b981;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.35);display:grid;place-items:center;font-weight:600;font-size:12px;color:#111}
-        .tp-pin img{display:block;width:100%;height:100%;max-width:none;flex:none;object-fit:cover;object-position:center}
-        .tp-pin{position:relative}
+        .tp-pin{position:relative;box-sizing:border-box;width:40px;height:40px;border-radius:0;overflow:hidden;border:3px solid #10b981;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.35);display:grid;place-items:center;font-weight:600;font-size:12px;color:#111}
+        .tp-pin-photo{position:absolute;inset:0;overflow:hidden}
+        .tp-pin-photo img{position:absolute;inset:0;display:block;width:100%!important;height:100%!important;max-width:none!important;object-fit:cover!important;object-position:center}
         .tp-pin-me{border-color:#2563eb}
         .tp-pin-off{border-color:#9ca3af;border-style:dashed;opacity:.7}
         .tp-pin-off img,.tp-pin-off span{filter:grayscale(1)}
