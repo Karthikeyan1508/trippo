@@ -101,7 +101,13 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
     }),
     prisma.expense.findMany({
       where: { tripId: id },
-      include: { shares: true },
+      include: {
+        shares: true,
+        edits: {
+          where: { status: "PENDING" },
+          include: { requestedBy: { select: { name: true, email: true } } },
+        },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.settlement.findMany({ where: { tripId: id } }),
@@ -545,6 +551,14 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
                   createdById: e.createdById,
                   splitType: e.splitType,
                   shareCount: e.shares.length,
+                  shares: e.shares.map((share) => ({ userId: share.userId, amount: share.amount })),
+                  pendingEdit: e.edits[0]
+                    ? {
+                        id: e.edits[0].id,
+                        requestedById: e.edits[0].requestedById,
+                        requestedByName: displayName(e.edits[0].requestedBy),
+                      }
+                    : null,
                   createdAt: e.createdAt,
                 }))}
                 transfers={transfers}

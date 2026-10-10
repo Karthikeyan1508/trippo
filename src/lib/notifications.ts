@@ -13,6 +13,9 @@ export type NotificationType =
   | "poll_created"
   | "gear_suggested"
   | "expense_added"
+  | "expense_edit_requested"
+  | "expense_edit_approved"
+  | "expense_edit_rejected"
   | "payment_received"
   | "prep_ready"
   | "stay_chosen"
@@ -31,6 +34,9 @@ export const NOTIFICATION_ICONS: Record<NotificationType, string> = {
   poll_created: "vote",
   gear_suggested: "bag",
   expense_added: "wallet",
+  expense_edit_requested: "pencil",
+  expense_edit_approved: "check",
+  expense_edit_rejected: "x",
   payment_received: "wallet",
   prep_ready: "list",
   stay_chosen: "bed",
