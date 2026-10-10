@@ -4,7 +4,7 @@ import { CheckCircle2 } from "lucide-react"
 import { formatMoney } from "@/lib/format"
 import { Progress } from "@/components/ui/progress-lite"
 import { AddExpenseDialog } from "./add-expense-dialog"
-import { DeleteExpenseButton, SettleButton } from "./budget-buttons"
+import { DeleteExpenseButton, ReviewExpenseEditButtons, SettleButton } from "./budget-buttons"
 import { expenseIcon } from "./expense-icons"
 
 export type BudgetExpense = {
@@ -16,6 +16,8 @@ export type BudgetExpense = {
   createdById: string | null
   splitType: string
   shareCount: number
+  shares: { userId: string; amount: number }[]
+  pendingEdit: { id: string; requestedById: string; requestedByName: string } | null
   createdAt: Date
 }
 
@@ -182,6 +184,7 @@ export function BudgetTab({
             {expenses.map((e) => {
               const Icon = expenseIcon(e.category)
               const canDelete = viewerIsAdmin || e.createdById === viewerId
+              const canEdit = e.createdById === viewerId && !e.pendingEdit
               return (
                 <li key={e.id} className="flex items-center gap-3 px-5 py-3">
                   <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
@@ -194,9 +197,28 @@ export function BudgetTab({
                       {e.splitType === "EQUAL" ? "split equally" : "custom split"} ·{" "}
                       {e.shareCount} {e.shareCount === 1 ? "person" : "people"}
                     </p>
+                    {e.pendingEdit && (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                        {viewerIsAdmin
+                          ? `Edit requested by ${e.pendingEdit.requestedByName}`
+                          : "Edit awaiting admin approval"}
+                      </p>
+                    )}
                   </div>
                   <span className="font-semibold">{formatMoney(e.amount, currency)}</span>
-                  {canDelete ? <DeleteExpenseButton id={e.id} /> : <span className="size-8" />}
+                  <span className="flex items-center gap-1">
+                    {viewerIsAdmin && e.pendingEdit && <ReviewExpenseEditButtons id={e.pendingEdit.id} />}
+                    {canEdit && (
+                      <AddExpenseDialog
+                        tripId={tripId}
+                        members={participants}
+                        currentUserId={viewerId}
+                        currency={currency}
+                        expense={{ ...e, shares: e.shares }}
+                      />
+                    )}
+                    {canDelete && <DeleteExpenseButton id={e.id} />}
+                  </span>
                 </li>
               )
             })}

@@ -2,10 +2,10 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Trash2, Check, Loader2 } from "lucide-react"
+import { Trash2, Check, X, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
-import { recordSettlement, deleteExpense } from "@/server/budget"
+import { recordSettlement, deleteExpense, reviewExpenseEdit } from "@/server/budget"
 import { Button } from "@/components/ui/button"
 
 export function SettleButton({
@@ -46,6 +46,28 @@ export function SettleButton({
       )}
       Settle
     </Button>
+  )
+}
+
+export function ReviewExpenseEditButtons({ id }: { id: string }) {
+  const [pending, startTransition] = React.useTransition()
+  const router = useRouter()
+  const review = (approved: boolean) => startTransition(async () => {
+    const res = await reviewExpenseEdit(id, approved)
+    if (res.ok) {
+      toast.success(approved ? "Expense edit approved" : "Expense edit rejected")
+      router.refresh()
+    } else toast.error(res.error)
+  })
+  return (
+    <span className="flex items-center gap-1">
+      <Button size="sm" variant="outline" disabled={pending} onClick={() => review(false)} aria-label="Reject expense edit">
+        {pending ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
+      </Button>
+      <Button size="sm" disabled={pending} onClick={() => review(true)} className="gap-1.5">
+        <Check className="size-3.5" /> Approve
+      </Button>
+    </span>
   )
 }
 

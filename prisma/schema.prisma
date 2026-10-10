@@ -26,6 +26,7 @@ model User {
   sessions      Session[]
   memberships   TripMember[]
   createdTrips  Trip[]          @relation("TripCreator")
+  requestedExpenseEdits ExpenseEdit[] @relation("ExpenseEditRequester")
   sentInvites   Invite[]        @relation("InviteSender")
   approvals     Approval[]
   checklistItems ChecklistItem[]
@@ -501,8 +502,39 @@ model Expense {
 
   trip   Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
   shares ExpenseShare[]
+  edits  ExpenseEdit[]
 
   @@index([tripId])
+}
+
+// A proposed change is kept separate from the published expense so balances
+// stay stable until a trip admin approves it.
+model ExpenseEdit {
+  id          String            @id @default(cuid())
+  expenseId   String
+  requestedById String
+  description String
+  amount      Float
+  category    ExpenseCategory
+  paidById    String
+  splitType   SplitType
+  shares      Json
+  status      ExpenseEditStatus @default(PENDING)
+  reviewedAt  DateTime?
+  reviewedById String?
+  createdAt   DateTime          @default(now())
+
+  expense     Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  requestedBy User    @relation("ExpenseEditRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@index([expenseId, status])
+  @@index([requestedById])
+}
+
+enum ExpenseEditStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model ExpenseShare {

@@ -2,11 +2,11 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Pencil, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
-import { addExpense } from "@/server/budget"
+import { addExpense, requestExpenseEdit } from "@/server/budget"
 import { EXPENSE_ICONS, EXPENSE_LABELS } from "./expense-icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,28 +31,44 @@ import {
 const CATEGORIES = ["FOOD", "STAY", "TRANSPORT", "ACTIVITY", "SHOPPING", "MISC"]
 
 type Member = { userId: string; name: string }
+type ExistingExpense = {
+  id: string
+  description: string
+  amount: number
+  category: string
+  paidById: string
+  splitType: string
+  shares: { userId: string; amount: number }[]
+}
 
 export function AddExpenseDialog({
   tripId,
   members,
   currentUserId,
   currency,
+  expense,
 }: {
   tripId: string
   members: Member[]
   currentUserId: string
   currency: string
+  expense?: ExistingExpense
 }) {
+  const isEdit = !!expense
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [pending, startTransition] = React.useTransition()
 
-  const [description, setDescription] = React.useState("")
-  const [amount, setAmount] = React.useState("")
-  const [category, setCategory] = React.useState("FOOD")
-  const [paidById, setPaidById] = React.useState(currentUserId)
-  const [splitType, setSplitType] = React.useState<"EQUAL" | "CUSTOM">("EQUAL")
-  const [custom, setCustom] = React.useState<Record<string, string>>({})
+  const [description, setDescription] = React.useState(expense?.description ?? "")
+  const [amount, setAmount] = React.useState(expense ? String(expense.amount) : "")
+  const [category, setCategory] = React.useState(expense?.category ?? "FOOD")
+  const [paidById, setPaidById] = React.useState(expense?.paidById ?? currentUserId)
+  const [splitType, setSplitType] = React.useState<"EQUAL" | "CUSTOM">(
+    expense?.splitType === "CUSTOM" ? "CUSTOM" : "EQUAL"
+  )
+  const [custom, setCustom] = React.useState<Record<string, string>>(
+    Object.fromEntries(expense?.shares.map((share) => [share.userId, String(share.amount)]) ?? [])
+  )
 
   const total = Number(amount) || 0
   const perHead = members.length ? total / members.length : 0
@@ -62,17 +78,17 @@ export function AddExpenseDialog({
   )
 
   function reset() {
-    setDescription("")
-    setAmount("")
-    setCategory("FOOD")
-    setPaidById(currentUserId)
-    setSplitType("EQUAL")
-    setCustom({})
+    setDescription(expense?.description ?? "")
+    setAmount(expense ? String(expense.amount) : "")
+    setCategory(expense?.category ?? "FOOD")
+    setPaidById(expense?.paidById ?? currentUserId)
+    setSplitType(expense?.splitType === "CUSTOM" ? "CUSTOM" : "EQUAL")
+    setCustom(Object.fromEntries(expense?.shares.map((share) => [share.userId, String(share.amount)]) ?? []))
   }
 
   function submit() {
     startTransition(async () => {
-      const res = await addExpense(tripId, {
+      const input = {
         description,
         amount: Number(amount),
         category: category as "FOOD",
@@ -87,9 +103,12 @@ export function AddExpenseDialog({
                 }))
                 .filter((s) => s.amount > 0)
             : undefined,
-      })
+      }
+      const res = expense
+        ? await requestExpenseEdit(expense.id, input)
+        : await addExpense(tripId, input)
       if (res.ok) {
-        toast.success("Expense added")
+        toast.success(expense ? "Edit sent to admin for approval" : "Expense added")
         reset()
         setOpen(false)
         router.refresh()
@@ -103,15 +122,15 @@ export function AddExpenseDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="gap-2">
-          <Plus className="size-4" />
-          Add expense
+          {isEdit ? <Pencil className="size-4" /> : <Plus className="size-4" />}
+          {isEdit ? "Edit" : "Add expense"}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add an expense</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit expense" : "Add an expense"}</DialogTitle>
           <DialogDescription>
-            Log what was spent and how to split it.
+            {isEdit ? "Your changes will be published after an admin approves them." : "Log what was spent and how to split it."}
           </DialogDescription>
         </DialogHeader>
 
@@ -246,7 +265,7 @@ export function AddExpenseDialog({
         <DialogFooter>
           <Button onClick={submit} disabled={pending} className="gap-2">
             {pending && <Loader2 className="size-4 animate-spin" />}
-            Add expense
+            {isEdit ? "Send for approval" : "Add expense"}
           </Button>
         </DialogFooter>
       </DialogContent>
