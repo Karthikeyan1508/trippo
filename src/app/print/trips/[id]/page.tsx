@@ -63,15 +63,16 @@ export default async function PrintPage({
       }
     >
       <style>{`
-        @page { margin: 1.5cm; }
+        @page { size: A4; margin: 1.1cm; }
         html, body { background: #fff; }
         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        @media print { html { zoom: .88; } }
       `}</style>
 
       <PrintControls />
 
       {/* Cover */}
-      <header className="border-b-4 border-brand pb-5">
+      <header className="border-b border-neutral-300 pb-5">
         <div className="flex items-center justify-between">
           <span className="text-sm font-bold tracking-[0.2em] text-brand uppercase">
             Trippo
@@ -101,7 +102,7 @@ export default async function PrintPage({
 
           <div className="mt-5 space-y-6">
             {itinerary.days.map((day) => (
-              <div key={day.id} className="break-inside-avoid">
+              <div key={day.id} className="break-inside-avoid border-t border-neutral-200 pt-5 first:border-t-0 first:pt-0">
                 <div className="flex items-baseline gap-2.5">
                   <span className="rounded bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
                     Day {day.dayNumber}
