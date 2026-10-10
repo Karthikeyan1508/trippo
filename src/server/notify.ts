@@ -21,6 +21,12 @@ export type NotifyInput = {
   body?: string
   /** Relative path the notification opens, e.g. /trips/<id>?tab=chat */
   url: string
+  /**
+   * Things that need an answer (a mention, a poll) must always reach the device: no
+   * "same message just sent" suppression, and each one gets its own notification
+   * instead of replacing the last. Default true (quiet duplicates).
+   */
+  dedupe?: boolean
 }
 
 /** First name, or the email's local part, for use inside a sentence. */
@@ -58,7 +64,8 @@ export async function notify(input: NotifyInput) {
     if (recipients.length === 0) return
 
     // Don't repeat the same message if it was just sent (e.g. a vote flipped twice).
-    const recent = await prisma.notification.findMany({
+    const dedupe = input.dedupe !== false
+    const recent = dedupe ? await prisma.notification.findMany({
       where: {
         userId: { in: recipients },
         type: input.type,
@@ -67,7 +74,7 @@ export async function notify(input: NotifyInput) {
         createdAt: { gt: new Date(Date.now() - 2 * 60 * 1000) },
       },
       select: { userId: true },
-    })
+    }) : []
     const already = new Set(recent.map((r) => r.userId))
     const fresh = recipients.filter((id) => !already.has(id))
     if (fresh.length === 0) return
@@ -94,7 +101,7 @@ export async function notify(input: NotifyInput) {
         title: input.title,
         body: pushBody,
         url: input.url,
-        tag: `${input.type}:${input.url}`,
+        tag: dedupe ? `${input.type}:${input.url}` : `${input.type}:${input.url}:${Date.now()}`,
       }).catch((error) => console.error("Push delivery failed:", error))
 
     try {

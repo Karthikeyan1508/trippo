@@ -158,24 +158,25 @@ export async function sendChatMessage(
     }
   }
 
-  // Tell the people who aren't looking at the chat. Anyone who is will see it land.
+  // Mentions always reach the device. Plain messages only go to people who aren't looking at the chat.
   const recently = Date.now() - 25_000
   const away = crew
     .filter((c) => c.userId !== user.id && !(c.chatSeenAt && c.chatSeenAt.getTime() > recently))
     .map((c) => c.userId)
-  const mentionedAway = mentions.filter((id) => away.includes(id))
-  if (mentionedAway.length > 0) {
+  const mentioned = mentions
+  if (mentioned.length > 0) {
     await notify({
       tripId,
       actorId: user.id,
-      to: { users: mentionedAway },
+      to: { users: mentioned },
+      dedupe: false,
       type: "chat_mention",
       title: `${personName(user)} mentioned you`,
       body: snippet(text, 120),
       url: tripUrl(tripId, "chat"),
     })
   }
-  const rest = away.filter((id) => !mentionedAway.includes(id))
+  const rest = away.filter((id) => !mentioned.includes(id))
   if (rest.length > 0 && !asksTrippo) {
     await notify({
       tripId,
@@ -359,7 +360,8 @@ export async function startCardPoll(input: {
   await notify({
     tripId: input.tripId,
     actorId: user.id,
-    to: { users: await awayFrom(input.tripId, voters.map((v) => v.userId)) },
+    to: { users: voters.map((v) => v.userId) },
+    dedupe: false,
     type: "poll_created",
     title: `${personName(user)} started a poll`,
     body: question,

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { membershipFor } from "@/lib/access"
 import { notify, personName } from "@/server/notify"
 import { tripUrl } from "@/lib/notifications"
-import { awayFrom, postPollResult } from "@/server/chat-core"
+import { postPollResult } from "@/server/chat-core"
 
 type Result = { ok: true } | { ok: false; error: string }
 
@@ -58,7 +58,8 @@ export async function createPoll(
   await notify({
     tripId,
     actorId: user.id,
-    to: { users: await awayFrom(tripId, voters.map((v) => v.userId)) },
+    to: { users: voters.map((v) => v.userId) },
+    dedupe: false,
     type: "poll_created",
     title: `${personName(user)} started a poll`,
     body: cleanQuestion,
