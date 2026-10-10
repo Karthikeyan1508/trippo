@@ -207,3 +207,99 @@ html {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ───────────────────────── Scrollbars ─────────────────────────
+ * Slim, square, theme-aware bars for every scroller (vertical and horizontal).
+ * The thumb brightens on hover and turns lime while dragged. Chrome and Safari use
+ * the ::-webkit-scrollbar rules; Firefox falls back to the standard properties.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 30%, transparent) transparent;
+}
+@supports selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--foreground) 24%, transparent);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    min-height: 40px;
+    min-width: 40px;
+    transition: background-color 0.15s;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--foreground) 48%, transparent);
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--primary);
+  }
+  ::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
+/* ───────────────────────── Clickable things ─────────────────────────
+ * Anything you can click shows a pointer, and lights up on hover as proof it is live.
+ * The highlight is a faint inset wash, so it works on any background; components with
+ * their own hover style simply layer on top of it. Disabled things stay still.
+ */
+@layer base {
+  :where(
+      button,
+      [role="button"],
+      [role="tab"],
+      [role="menuitem"],
+      [role="menuitemcheckbox"],
+      [role="menuitemradio"],
+      [role="option"],
+      [role="radio"],
+      [role="switch"],
+      [role="checkbox"],
+      [role="combobox"],
+      summary,
+      select,
+      label[for],
+      a[href],
+      input[type="checkbox"],
+      input[type="radio"],
+      input[type="range"],
+      input[type="file"],
+      input[type="color"]
+    ):not(:disabled, [aria-disabled="true"], [data-disabled]) {
+    cursor: pointer;
+  }
+  :where(button, [role="button"], [role="tab"], [role="menuitem"], [role="option"], summary, a[href]):is(:disabled, [aria-disabled="true"], [data-disabled]) {
+    cursor: not-allowed;
+  }
+  :where(button, [role="button"], [role="tab"], [role="menuitem"], [role="option"], summary, a[href]):not(
+      :disabled,
+      [aria-disabled="true"],
+      [data-disabled],
+      [data-slot="sidebar-rail"],
+      [data-slot="breadcrumb-page"]
+    ) {
+    transition: box-shadow 0.12s ease-out, background-color 0.12s ease-out, color 0.12s ease-out;
+  }
+  :where(button, [role="button"], [role="tab"], [role="menuitem"], [role="option"], summary, a[href]):not(
+      :disabled,
+      [aria-disabled="true"],
+      [data-disabled],
+      [data-slot="sidebar-rail"],
+      [data-slot="breadcrumb-page"]
+    ):hover {
+    box-shadow: inset 0 0 0 999px color-mix(in oklab, currentColor 8%, transparent);
+  }
+}

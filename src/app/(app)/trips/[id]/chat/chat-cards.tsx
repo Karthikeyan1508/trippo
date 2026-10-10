@@ -116,7 +116,7 @@ function Tiles({ count, children }: { count: number; children: React.ReactNode }
   return (
     <div
       className={cn(
-        "flex snap-x snap-mandatory scroll-px-2 gap-2 overflow-x-auto p-2 [scrollbar-width:thin] [&>*:only-child]:w-full [&>*:only-child]:max-w-none",
+        "flex snap-x snap-mandatory scroll-px-2 gap-2 overflow-x-auto p-2 [&>*:only-child]:w-full [&>*:only-child]:max-w-none",
         "@[40rem]:grid @[40rem]:snap-none @[40rem]:overflow-visible",
         COLUMNS[count] ?? COLUMNS[3]
       )}
@@ -194,7 +194,7 @@ function SelectBox({ checked, onChange, label }: { checked: boolean; onChange: (
 }
 
 /** Wires a card's "add" and "poll" buttons to the dialogs and the server. */
-function useCardActions(messageId: string, card: ChatCard) {
+function useCardActions(messageId: string, card: ChatCard, states: States) {
   const { tripId, viewer, refresh, planDays } = useChat()
   const [adding, setAdding] = React.useState<{ key: string; name: string; kind: "hotel" | "transport" | "place"; day: number; time: string } | null>(null)
   const [polling, setPolling] = React.useState(false)
@@ -226,6 +226,14 @@ function useCardActions(messageId: string, card: ChatCard) {
   return {
     observer: isObserver(viewer.role),
     pollable: card.items.length > 1,
+    // While a poll on these options is open, another one would only split the vote.
+    openPollId: (() => {
+      for (const item of card.items) {
+        const st = states[item.key]
+        if (st?.kind === "poll" && !st.closed) return st.pollMessageId
+      }
+      return undefined
+    })(),
     admin: viewer.role === "ADMIN",
     hasPlan: planDays.length > 0,
     selected,
@@ -245,12 +253,31 @@ function PollFooter({
   total,
   observer,
   onPoll,
+  openPollId,
 }: {
   count: number
   total: number
   observer: boolean
   onPoll: () => void
+  openPollId?: string
 }) {
+  const { jumpTo } = useChat()
+  if (openPollId) {
+    return (
+      <>
+        <p className="text-xs text-muted-foreground">A poll is open for these. You can start another once it closes.</p>
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => jumpTo(openPollId)}>
+            View poll
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" disabled>
+            <CircleCheck className="size-3.5" />
+            Poll created
+          </Button>
+        </div>
+      </>
+    )
+  }
   return (
     <>
       <p className="text-xs text-muted-foreground">Not sure? Let the crew decide.</p>
@@ -307,7 +334,7 @@ function HotelTile({
             {item.badge}
           </span>
         )}
-        {actions.pollable && (
+        {actions.pollable && !actions.openPollId && (
           <div className="absolute top-2 right-2">
             <SelectBox checked={checked} onChange={onCheck} label={`Include ${item.name} in a poll`} />
           </div>
@@ -382,7 +409,7 @@ function to24(clock: string): string {
 }
 
 function HotelsCardView({ card, messageId, states }: { card: HotelsCard; messageId: string; states: States }) {
-  const actions = useCardActions(messageId, card)
+  const actions = useCardActions(messageId, card, states)
   const stay = card.stay
   return (
     <CardShell
@@ -390,7 +417,7 @@ function HotelsCardView({ card, messageId, states }: { card: HotelsCard; message
       className={shellWidth(card.items.length)}
       title={card.title}
       meta={stay ? `${fmtDay(stay.checkIn)} to ${fmtDay(stay.checkOut)}, ${stay.nights} ${stay.nights === 1 ? "night" : "nights"}, ${stay.guests} ${stay.guests === 1 ? "guest" : "guests"}` : undefined}
-      footer={actions.pollable ? <PollFooter count={actions.selected.length} total={card.items.length} observer={actions.observer} onPoll={() => actions.setPolling(true)} /> : undefined}
+      footer={actions.pollable ? <PollFooter count={actions.selected.length} total={card.items.length} observer={actions.observer} onPoll={() => actions.setPolling(true)} openPollId={actions.openPollId} /> : undefined}
     >
       <Tiles count={card.items.length}>
         {card.items.map((item) => (
@@ -508,7 +535,7 @@ function TransportRow({
       </div>
 
       <div className={cn("flex items-center gap-2 sm:flex-col sm:items-end", actions.pollable ? "sm:justify-between" : "sm:justify-end")}>
-        {actions.pollable && <SelectBox checked={checked} onChange={onCheck} label={`Include ${item.title} in a poll`} />}
+        {actions.pollable && !actions.openPollId && <SelectBox checked={checked} onChange={onCheck} label={`Include ${item.title} in a poll`} />}
         <ItemAction
           state={state}
           observer={actions.observer}
@@ -521,14 +548,14 @@ function TransportRow({
 }
 
 function TransportCardView({ card, messageId, states }: { card: TransportCard; messageId: string; states: States }) {
-  const actions = useCardActions(messageId, card)
+  const actions = useCardActions(messageId, card, states)
   const longest = Math.max(0, ...card.items.map((i) => i.durationMin ?? 0))
   return (
     <CardShell
       icon={RouteIcon}
       title={card.from && card.to ? `${card.from} to ${card.to}` : card.title}
       meta={card.distanceKm ? `${card.distanceKm} km by road` : undefined}
-      footer={actions.pollable ? <PollFooter count={actions.selected.length} total={card.items.length} observer={actions.observer} onPoll={() => actions.setPolling(true)} /> : undefined}
+      footer={actions.pollable ? <PollFooter count={actions.selected.length} total={card.items.length} observer={actions.observer} onPoll={() => actions.setPolling(true)} openPollId={actions.openPollId} /> : undefined}
     >
       <div className="space-y-2 p-2">
         {card.items.map((item) => (
@@ -568,7 +595,7 @@ function PlaceTile({
     <article className={TILE}>
       <div className="relative">
         <Photo src={item.image} icon={MapPinned} />
-        {actions.pollable && (
+        {actions.pollable && !actions.openPollId && (
           <div className="absolute top-2 right-2">
             <SelectBox checked={checked} onChange={onCheck} label={`Include ${item.name} in a poll`} />
           </div>
@@ -604,13 +631,13 @@ function PlaceTile({
 }
 
 function PlacesCardView({ card, messageId, states }: { card: PlacesCard; messageId: string; states: States }) {
-  const actions = useCardActions(messageId, card)
+  const actions = useCardActions(messageId, card, states)
   return (
     <CardShell
       icon={MapPinned}
       className={shellWidth(card.items.length)}
       title={card.title}
-      footer={actions.pollable ? <PollFooter count={actions.selected.length} total={card.items.length} observer={actions.observer} onPoll={() => actions.setPolling(true)} /> : undefined}
+      footer={actions.pollable ? <PollFooter count={actions.selected.length} total={card.items.length} observer={actions.observer} onPoll={() => actions.setPolling(true)} openPollId={actions.openPollId} /> : undefined}
     >
       <Tiles count={card.items.length}>
         {card.items.map((item) => (
