@@ -29,6 +29,24 @@ import {
 } from "@/components/ui/select"
 
 const CATEGORIES = ["FOOD", "STAY", "TRANSPORT", "ACTIVITY", "SHOPPING", "MISC"]
+const LOCAL_CURRENCIES = [
+  ["AED", "UAE Dirham"], ["ARS", "Argentine Peso"], ["AUD", "Australian Dollar"],
+  ["BDT", "Bangladeshi Taka"], ["BRL", "Brazilian Real"], ["CAD", "Canadian Dollar"],
+  ["CHF", "Swiss Franc"], ["CLP", "Chilean Peso"], ["CNY", "Chinese Yuan"],
+  ["COP", "Colombian Peso"], ["CZK", "Czech Koruna"], ["DKK", "Danish Krone"],
+  ["EGP", "Egyptian Pound"], ["EUR", "Euro"], ["GBP", "British Pound"],
+  ["HKD", "Hong Kong Dollar"], ["HUF", "Hungarian Forint"], ["IDR", "Indonesian Rupiah"],
+  ["ILS", "Israeli New Shekel"], ["INR", "Indian Rupee"], ["JPY", "Japanese Yen"],
+  ["KES", "Kenyan Shilling"], ["KRW", "South Korean Won"], ["LKR", "Sri Lankan Rupee"],
+  ["MAD", "Moroccan Dirham"], ["MXN", "Mexican Peso"], ["MYR", "Malaysian Ringgit"],
+  ["NOK", "Norwegian Krone"], ["NPR", "Nepalese Rupee"], ["NZD", "New Zealand Dollar"],
+  ["PEN", "Peruvian Sol"], ["PHP", "Philippine Peso"], ["PKR", "Pakistani Rupee"],
+  ["PLN", "Polish Zloty"], ["QAR", "Qatari Riyal"], ["RON", "Romanian Leu"],
+  ["SAR", "Saudi Riyal"], ["SEK", "Swedish Krona"], ["SGD", "Singapore Dollar"],
+  ["THB", "Thai Baht"], ["TRY", "Turkish Lira"], ["TWD", "Taiwan Dollar"],
+  ["TZS", "Tanzanian Shilling"], ["USD", "US Dollar"], ["VND", "Vietnamese Dong"],
+  ["ZAR", "South African Rand"],
+] as const
 
 type Member = { userId: string; name: string }
 type ExistingExpense = {
@@ -110,6 +128,13 @@ export function AddExpenseDialog({
       setExchangeRate(0)
       setExchangeRateAsOf("")
     }
+  }
+
+  function updateLocalCurrency(next: string) {
+    setLocalCurrency(next)
+    setAmount(next === currency ? localAmount : "")
+    setExchangeRate(next === currency ? 1 : 0)
+    setExchangeRateAsOf("")
   }
 
   function convert() {
@@ -200,18 +225,16 @@ export function AddExpenseDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Local currency</Label>
-              <Input
-                value={localCurrency}
-                maxLength={3}
-                onChange={(e) => {
-                  const next = e.target.value.toUpperCase()
-                  setLocalCurrency(next)
-                  setAmount(next === currency ? localAmount : "")
-                  setExchangeRate(next === currency ? 1 : 0)
-                  setExchangeRateAsOf("")
-                }}
-                placeholder="THB"
-              />
+              <Select value={localCurrency} onValueChange={updateLocalCurrency}>
+                <SelectTrigger className="w-full" aria-label="Local currency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LOCAL_CURRENCIES.map(([code, name]) => (
+                    <SelectItem key={code} value={code}>{name} ({code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex items-end gap-3 rounded-lg border p-3">
