@@ -28,6 +28,7 @@ export type NotificationType =
   | "poll_closed"
   | "role_changed"
   | "trip_updated"
+  | "story_requested"
   | "test"
 
 /** Icon name per type; the client maps names to Lucide components. */
@@ -56,6 +57,7 @@ export const NOTIFICATION_ICONS: Record<NotificationType, string> = {
   poll_closed: "vote",
   role_changed: "shield",
   trip_updated: "pencil",
+  story_requested: "sparkles",
   test: "bell",
 }
 

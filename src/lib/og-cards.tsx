@@ -264,3 +264,131 @@ export async function inviteCard(code: string) {
     OG_SIZE
   )
 }
+
+/**
+ * Share card for a public trip story (/story/[token]): the story's own photo full bleed under a
+ * dark wash, in the same type and lime as the other cards. Only what the story page itself shows.
+ */
+export async function storyCard(token: string) {
+  const row = /^[\w-]{16,64}$/.test(token)
+    ? await prisma.tripStory.findUnique({
+        where: { shareToken: token },
+        select: { data: true, trip: { select: { coverImage: true } } },
+      })
+    : null
+  if (!row) return brandCard()
+
+  const story = row.data as unknown as {
+    tripName: string
+    destination: string
+    scenes: { photoUrl: string | null; images: string[] }[]
+  }
+  const candidates = [
+    ...story.scenes.flatMap((s) => [s.photoUrl, ...s.images]),
+    row.trip.coverImage,
+  ].filter((u, i, all): u is string => Boolean(u) && all.indexOf(u) === i)
+  let photo: string | null = null
+  for (const url of candidates.slice(0, 4)) {
+    photo = await loadPhoto(url)
+    if (photo) break
+  }
+
+  const title = story.tripName.length > 44 ? `${story.tripName.slice(0, 43)}…` : story.tripName
+  const titleSize = title.length > 30 ? 64 : title.length > 18 ? 80 : 98
+  const stops = story.scenes.length
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          position: "relative",
+          color: "#fff",
+          background: INK,
+          backgroundImage:
+            "radial-gradient(circle at 100% 100%, rgba(139,224,0,0.42), rgba(139,224,0,0) 55%), radial-gradient(circle at 0% 0%, rgba(139,224,0,0.14), rgba(139,224,0,0) 45%)",
+        }}
+      >
+        {photo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photo} alt="" width={1200} height={630} style={{ position: "absolute", top: 0, left: 0, objectFit: "cover" }} />
+        )}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            backgroundImage: photo
+              ? "linear-gradient(to top, rgba(16,23,10,0.96), rgba(16,23,10,0.55) 55%, rgba(16,23,10,0.35))"
+              : "none",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            padding: 64,
+          }}
+        >
+          <Brand />
+
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", fontSize: 24, letterSpacing: 5, color: LIME, textTransform: "uppercase" }}>
+              A trip story
+            </div>
+            <div
+              style={{
+                display: "flex",
+                marginTop: 16,
+                fontSize: titleSize,
+                fontWeight: 700,
+                lineHeight: 1.05,
+                letterSpacing: -2,
+              }}
+            >
+              {title}
+            </div>
+            <div style={{ display: "flex", marginTop: 22, fontSize: 32, color: "rgba(255,255,255,0.85)" }}>
+              {story.destination}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                padding: "16px 30px",
+                fontSize: 28,
+                fontWeight: 700,
+                color: "#1d2e00",
+                background: LIME,
+              }}
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="#1d2e00">
+                <polygon points="7 4 20 12 7 20 7 4" />
+              </svg>
+              Watch the story
+            </div>
+            <div style={{ display: "flex", fontSize: 26, color: "rgba(255,255,255,0.75)" }}>
+              {stops} {stops === 1 ? "stop" : "stops"}, mapped one by one
+            </div>
+          </div>
+        </div>
+      </div>
+    ),
+    OG_SIZE
+  )
+}

@@ -154,6 +154,15 @@ the free Render plan. `ChatMessage.updatedAt` is touched on every change, so vot
 and request decisions reach everyone on the next poll. People who are away from the chat get a
 notification (and a push if enabled); people looking at it do not.
 
+## The trip story
+
+The **Story** tab is a cinematic, narrated fly-through of the plan. An admin creates it once
+(`generateTripStory`); after that it is saved in `TripStory` and everyone watches the saved copy,
+so no research, narration or voice credits are spent again. An admin can also make a public link
+(`/story/<token>`) that shows only that story: no crew, plan, budget or chat, and no sign-in. Stopping
+sharing deletes the token, so the old link becomes a 404. Public viewers hear the device voice, not
+the paid one.
+
 ## Notifications & installing the app
 
 - **In-app inbox**: every crew action that matters (chat mentions and messages while

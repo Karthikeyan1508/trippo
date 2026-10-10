@@ -118,6 +118,7 @@ model Trip {
   products    ProductSuggestion[]
   notifications Notification[]
   chatMessages ChatMessage[]
+  story        TripStory?
   itineraryRequests ItineraryRequest[]
 
   @@index([createdById])
@@ -730,4 +731,18 @@ model ItineraryRequest {
 
   @@index([tripId, status])
   @@index([messageId, itemKey])
+}
+
+/// The trip's generated visual story: built once by an admin, then kept. The share token
+/// (when set) makes this one story viewable at /story/<token> without signing in.
+model TripStory {
+  id            String    @id @default(cuid())
+  tripId        String    @unique
+  data          Json
+  generatedById String?
+  shareToken    String?   @unique
+  sharedAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
 }

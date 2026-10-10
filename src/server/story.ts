@@ -1,7 +1,14 @@
 "use server"
 
+import { randomBytes } from "node:crypto"
+import { revalidatePath } from "next/cache"
+import type { Prisma } from "@prisma/client"
+
 import { prisma } from "@/lib/prisma"
 import { requireUser } from "@/lib/session"
+import { rateLimit } from "@/lib/rate-limit"
+import { notify, personName } from "@/server/notify"
+import { tripUrl } from "@/lib/notifications"
 import {
   researchTrip,
   fetchPlaceImages,
@@ -28,18 +35,17 @@ export type StoryScene = {
   narration: string
 }
 
-export type TripStory =
-  | {
-      ok: true
-      destination: string
-      tripName: string
-      intro: string
-      outro: string
-      scenes: StoryScene[]
-      route: [number, number][] | null
-      narrated: boolean
-    }
-  | { ok: false; error: string }
+export type StoryData = {
+  destination: string
+  tripName: string
+  intro: string
+  outro: string
+  scenes: StoryScene[]
+  route: [number, number][] | null
+  narrated: boolean
+}
+
+type Built = ({ ok: true } & StoryData) | { ok: false; error: string }
 
 /** Road-following polyline through the stops (OSRM public API); null on failure. */
 async function fetchRoute(
@@ -76,8 +82,8 @@ function findThumb(name: string | null, pool: PlaceLite[]): string | null {
   return hit?.thumbnail ?? null
 }
 
-export async function getTripStory(tripId: string): Promise<TripStory> {
-  const user = await requireUser()
+/** Researches, narrates and maps the trip. Expensive, so it only runs from generateTripStory. */
+async function buildStory(tripId: string, userId: string): Promise<Built> {
 
   const trip = await prisma.trip.findUnique({
     where: { id: tripId },
@@ -96,7 +102,7 @@ export async function getTripStory(tripId: string): Promise<TripStory> {
     },
   })
   if (!trip) return { ok: false, error: "Trip not found." }
-  if (!trip.members.some((m) => m.userId === user.id)) {
+  if (!trip.members.some((m) => m.userId === userId)) {
     return { ok: false, error: "You're not a member of this trip." }
   }
   const itinerary = trip.itineraries[0]
@@ -217,4 +223,78 @@ export async function getTripStory(tripId: string): Promise<TripStory> {
     route,
     narrated: narration !== null,
   }
+}
+
+type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: string }
+
+async function adminOf(tripId: string) {
+  const user = await requireUser()
+  const member = await prisma.tripMember.findUnique({ where: { tripId_userId: { tripId, userId: user.id } } })
+  return { user, member }
+}
+
+/**
+ * Builds the trip's story and keeps it. Admins only, and only once: after that the saved
+ * story is what everyone watches, so nothing here is ever spent twice.
+ */
+export async function generateTripStory(tripId: string): Promise<ActionResult<{ story: StoryData }>> {
+  const { user, member } = await adminOf(tripId)
+  if (!member) return { ok: false, error: "You're not a member of this trip." }
+  if (member.role !== "ADMIN") return { ok: false, error: "Only an admin can create the story." }
+  if (await prisma.tripStory.findUnique({ where: { tripId }, select: { id: true } })) {
+    return { ok: false, error: "This trip's story has already been created." }
+  }
+
+  const built = await buildStory(tripId, user.id)
+  if (!built.ok) return built
+  const { ok: _ok, ...data } = built
+  void _ok
+  try {
+    await prisma.tripStory.create({ data: { tripId, data: data as unknown as Prisma.InputJsonValue, generatedById: user.id } })
+  } catch {
+    // Two admins pressed the button together: the first one's story stands.
+    return { ok: false, error: "This trip's story has already been created." }
+  }
+  revalidatePath(`/trips/${tripId}`)
+  return { ok: true, story: data }
+}
+
+/** Turns the public link on (making one if needed) or off. Admins only; shares only this story. */
+export async function setStorySharing(tripId: string, enabled: boolean): Promise<ActionResult<{ shareToken: string | null }>> {
+  const { member } = await adminOf(tripId)
+  if (!member || member.role !== "ADMIN") return { ok: false, error: "Only an admin can share the story." }
+  const story = await prisma.tripStory.findUnique({ where: { tripId } })
+  if (!story) return { ok: false, error: "Create the story first." }
+  if (!enabled) {
+    await prisma.tripStory.update({ where: { tripId }, data: { shareToken: null, sharedAt: null } })
+    revalidatePath(`/trips/${tripId}`)
+    return { ok: true, shareToken: null }
+  }
+  const shareToken = story.shareToken ?? randomBytes(18).toString("base64url")
+  await prisma.tripStory.update({ where: { tripId }, data: { shareToken, sharedAt: story.sharedAt ?? new Date() } })
+  revalidatePath(`/trips/${tripId}`)
+  return { ok: true, shareToken }
+}
+
+/** A crew member asks the admins to create the story. They are told; nothing is built until one of them does. */
+export async function requestTripStory(tripId: string): Promise<ActionResult> {
+  const { user, member } = await adminOf(tripId)
+  if (!member) return { ok: false, error: "You're not a member of this trip." }
+  if (member.role === "ADMIN") return { ok: false, error: "You can create the story yourself." }
+  if (await prisma.tripStory.findUnique({ where: { tripId }, select: { id: true } })) {
+    return { ok: false, error: "The story has already been created." }
+  }
+  const limited = rateLimit(`story-request:${tripId}:${user.id}`, 1, 6 * 60 * 60 * 1000)
+  if (!limited.ok) return { ok: true }
+  await notify({
+    tripId,
+    actorId: user.id,
+    to: "admins",
+    type: "story_requested",
+    title: `${personName(user)} asked for the trip story`,
+    body: "Open the Story tab to create it",
+    url: tripUrl(tripId, "story"),
+    dedupe: false,
+  })
+  return { ok: true }
 }

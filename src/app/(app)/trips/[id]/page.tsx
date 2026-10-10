@@ -50,6 +50,7 @@ import { LiveMap } from "./live-map"
 import { TripModeControls } from "@/components/trip-mode-controls"
 import { BudgetTab } from "./budget-tab"
 import { TripStory } from "./trip-story"
+import type { StoryData } from "@/server/story"
 import type { MapStop } from "./itinerary-map"
 
 type ApprovalStatus = "APPROVED" | "REJECTED" | "PENDING"
@@ -86,7 +87,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
   }
 
   // Everything below is independent of each other, so load it together.
-  const [itinerary, expenses, settlements, chat, checklist, products, notifications] = await Promise.all([
+  const [itinerary, expenses, settlements, chat, checklist, products, notifications, savedStory] = await Promise.all([
     prisma.itinerary.findFirst({
       where: { tripId: id },
       orderBy: { generatedAt: "desc" },
@@ -121,6 +122,7 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
       orderBy: { createdAt: "desc" },
     }),
     listNotifications(id, 100),
+    prisma.tripStory.findUnique({ where: { tripId: id }, select: { data: true, shareToken: true } }),
   ])
   const unreadCount = notifications.filter((n) => !n.read).length
 
@@ -557,11 +559,16 @@ export default async function TripPage({ params }: PageProps<"/trips/[id]">) {
                 <h3 className="font-medium">Visual story</h3>
                 <p className="text-sm text-muted-foreground">
                   A cinematic fly-through of your trip: 3D map, photos of each place, and
-                  a voice-over.
+                  a voice-over. An admin creates it once; after that it is saved here for the crew.
                 </p>
               </div>
               {itinerary ? (
-                <TripStory tripId={trip.id} />
+                <TripStory
+                  tripId={trip.id}
+                  initial={(savedStory?.data as unknown as StoryData | undefined) ?? null}
+                  isAdmin={isAdmin}
+                  shareToken={isAdmin ? (savedStory?.shareToken ?? null) : null}
+                />
               ) : (
                 <div className="flex flex-col items-center rounded-2xl border border-dashed bg-card/50 px-6 py-14 text-center">
                   <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-brand">

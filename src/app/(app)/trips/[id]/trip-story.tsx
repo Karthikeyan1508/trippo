@@ -19,14 +19,17 @@ import {
   MapPin,
   ExternalLink,
   Link2,
+  Copy,
+  Globe,
+  Lock,
 } from "lucide-react"
 
-import { getTripStory, type TripStory as TripStoryType } from "@/server/story"
+import { generateTripStory, requestTripStory, setStorySharing, type StoryData } from "@/server/story"
 import { Button } from "@/components/ui/button"
 import { ActivityIcon, activityIconSvg } from "@/components/activity-icon"
 import { cssVarToHex } from "@/lib/css-color"
 
-type LoadedStory = Extract<TripStoryType, { ok: true }>
+type LoadedStory = StoryData
 
 const OSM_STYLE = {
   version: 8,
@@ -98,16 +101,105 @@ async function makeIconMarker(iconKey: string): Promise<ImageData | null> {
   return ctx.getImageData(0, 0, size * dpr, size * dpr)
 }
 
-export function TripStory({ tripId }: { tripId: string }) {
-  const [story, setStory] = React.useState<LoadedStory | null>(null)
+/** Admin control for the public link: only this story is shared, never the trip. */
+function StoryShare({ tripId, token, onChange }: { tripId: string; token: string | null; onChange: (token: string | null) => void }) {
+  const [busy, setBusy] = React.useState(false)
+  const origin = React.useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => ""
+  )
+  const link = token ? `${origin}/story/${token}` : ""
+
+  async function toggle(enabled: boolean) {
+    setBusy(true)
+    const res = await setStorySharing(tripId, enabled)
+    setBusy(false)
+    if (!res.ok) return void toast.error(res.error)
+    onChange(res.shareToken)
+    toast.success(enabled ? "Public link is on." : "Sharing stopped. The old link no longer works.")
+  }
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success("Link copied")
+    } catch {
+      toast.error("Could not copy. Select the link and copy it.")
+    }
+  }
+
+  if (!token) {
+    return (
+      <div className="mt-6 w-full max-w-md border-t pt-5 text-left">
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <Lock className="size-4 text-muted-foreground" />
+          Only your crew can watch this
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Make a public link to share just this story. Nothing else about the trip is shared.
+        </p>
+        <Button variant="outline" size="sm" className="mt-3 gap-1.5" onClick={() => toggle(true)} disabled={busy}>
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <Globe className="size-4" />}
+          Create public link
+        </Button>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-6 w-full max-w-md border-t pt-5 text-left">
+      <p className="flex items-center gap-2 text-sm font-medium">
+        <Globe className="size-4 text-brand" />
+        Anyone with the link can watch this story
+      </p>
+      <div className="mt-3 flex gap-2">
+        <input
+          readOnly
+          value={link}
+          onFocus={(e) => e.currentTarget.select()}
+          aria-label="Public story link"
+          className="h-9 min-w-0 flex-1 border bg-background/60 px-3 text-xs outline-none focus-visible:border-primary"
+        />
+        <Button size="sm" className="h-9 gap-1.5" onClick={copy}>
+          <Copy className="size-4" />
+          Copy
+        </Button>
+      </div>
+      <Button variant="ghost" size="sm" className="mt-2 h-8 gap-1.5 px-2 text-xs text-muted-foreground" onClick={() => toggle(false)} disabled={busy}>
+        <Lock className="size-3.5" />
+        Stop sharing
+      </Button>
+    </div>
+  )
+}
+
+export function TripStory({
+  tripId,
+  initial,
+  isAdmin,
+  shareToken: initialToken,
+  publicMode = false,
+}: {
+  tripId: string
+  /** The saved story, if one has been created. */
+  initial: LoadedStory | null
+  isAdmin: boolean
+  shareToken: string | null
+  /** Someone watching through the public link: full screen, no controls that need an account. */
+  publicMode?: boolean
+}) {
+  const [saved, setSaved] = React.useState<LoadedStory | null>(initial)
+  const [token, setToken] = React.useState<string | null>(initialToken)
+  const [story, setStory] = React.useState<LoadedStory | null>(publicMode ? initial : null)
   const [loading, setLoading] = React.useState(false)
+  const [requested, setRequested] = React.useState(false)
 
   const containerRef = React.useRef<HTMLDivElement>(null)
   const mapRef = React.useRef<any>(null)
   const mlRef = React.useRef<any>(null)
   const mutedRef = React.useRef(false)
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
-  const premiumUnavailableRef = React.useRef(false)
+  // Public viewers get the device voice: the premium voice is paid for by the crew's account.
+  const premiumUnavailableRef = React.useRef(publicMode)
 
   const [mapReady, setMapReady] = React.useState(false)
   const [started, setStarted] = React.useState(false)
@@ -137,12 +229,13 @@ export function TripStory({ tripId }: { tripId: string }) {
     return () => clearInterval(t)
   }, [step, story, N])
 
-  async function load() {
+  async function create() {
     setLoading(true)
-    const res = await getTripStory(tripId)
+    const res = await generateTripStory(tripId)
     setLoading(false)
     if (res.ok) {
-      setStory(res)
+      setSaved(res.story)
+      setStory(res.story)
     } else {
       toast.error(res.error)
     }
@@ -381,26 +474,61 @@ export function TripStory({ tripId }: { tripId: string }) {
     })
   }
 
-  // ── Launcher (before the story is built) ──────────────────────────────
+  async function askAdmins() {
+    setLoading(true)
+    const res = await requestTripStory(tripId)
+    setLoading(false)
+    if (res.ok) {
+      setRequested(true)
+      toast.success("Asked the admins to create the story.")
+    } else {
+      toast.error(res.error)
+    }
+  }
+
+  // ── Launcher: the saved story waits for a click; admins can create it once ──
   if (!story) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 px-6 py-16 text-center">
-        <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary/10 text-brand">
+      <div className="flex flex-col items-center justify-center border border-dashed bg-card/50 px-6 py-14 text-center">
+        <div className="mb-4 grid size-14 place-items-center bg-primary/10 text-brand">
           <Clapperboard className="size-7" />
         </div>
-        <h3 className="text-lg font-semibold">Your trip, as a story</h3>
-        <p className="mt-1 max-w-md text-sm text-muted-foreground">
-          A cinematic fly-through of your itinerary. The map travels stop to
-          stop in 3D, with photos of each place and an AI voice-over.
-        </p>
-        <Button onClick={load} disabled={loading} size="lg" className="mt-6 gap-2">
-          {loading ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Sparkles className="size-4" />
-          )}
-          {loading ? "Building your story…" : "Create visual story"}
-        </Button>
+        {saved ? (
+          <>
+            <h3 className="text-lg font-semibold">{saved.tripName}, as a story</h3>
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">
+              {saved.scenes.length} stops, mapped stop to stop with photos and a voice-over.
+            </p>
+            <Button onClick={() => setStory(saved)} size="lg" className="mt-6 gap-2">
+              <Play className="size-4" fill="currentColor" />
+              Watch the story
+            </Button>
+            {isAdmin && <StoryShare tripId={tripId} token={token} onChange={setToken} />}
+          </>
+        ) : isAdmin ? (
+          <>
+            <h3 className="text-lg font-semibold">Your trip, as a story</h3>
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">
+              A cinematic fly-through of your itinerary. The map travels stop to stop in 3D, with photos of each place
+              and an AI voice-over. It is created once and then kept, so make sure the plan is final.
+            </p>
+            <Button onClick={create} disabled={loading} size="lg" className="mt-6 gap-2">
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+              {loading ? "Building your story…" : "Create visual story"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <h3 className="text-lg font-semibold">No story yet</h3>
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">
+              Only an admin can create the trip story, and only once. Ask them to make it when the plan is final, and it will show up here.
+            </p>
+            <Button onClick={askAdmins} disabled={loading || requested} variant={requested ? "outline" : "default"} size="lg" className="mt-6 gap-2">
+              {loading ? <Loader2 className="size-4 animate-spin" /> : requested ? <Clapperboard className="size-4" /> : <Sparkles className="size-4" />}
+              {requested ? "Requested" : "Request an admin to create the story"}
+            </Button>
+          </>
+        )}
       </div>
     )
   }
@@ -418,14 +546,30 @@ export function TripStory({ tripId }: { tripId: string }) {
     : ""
 
   return (
-    <div className="overflow-hidden rounded-2xl border bg-card">
-      <style>{`.maplibregl-ctrl-attrib{display:none}`}</style>
+    <div className="overflow-hidden border bg-card">
+      <style>{`
+        .maplibregl-ctrl-attrib{display:none}
+        .story-shell{--story-h:min(68dvh,780px)}
+        .story-photo{height:13rem}
+        .story-map{height:42dvh;min-height:15rem}
+        .story-left{border-bottom-width:0;border-top-width:1px}
+        @media (min-width:768px), (orientation:landscape) and (min-width:560px){
+          .story-shell{flex-direction:row}
+          .story-left{width:clamp(270px,34vw,400px);flex-shrink:0;height:var(--story-h);min-height:20rem;border-top-width:0;border-right-width:1px}
+          .story-mapwrap{flex:1;min-width:0}
+          .story-map{height:var(--story-h);min-height:20rem}
+        }
+        @media (max-height:520px){
+          .story-shell{--story-h:calc(100dvh - 4rem)}
+          .story-photo{height:6.5rem}
+        }
+      `}</style>
 
-      <div className="flex flex-col lg:flex-row">
+      <div className="story-shell flex flex-col-reverse" style={publicMode ? ({ "--story-h": "calc(100dvh - 3.5rem)" } as React.CSSProperties) : undefined}>
         {/* LEFT: photos, details, links, controls */}
-        <div className="flex w-full flex-col border-b lg:h-[68vh] lg:min-h-[540px] lg:w-[400px] lg:shrink-0 lg:border-r lg:border-b-0">
+        <div className="story-left flex w-full flex-col border-b">
           {/* Photo carousel */}
-          <div className="relative h-52 shrink-0 overflow-hidden bg-muted">
+          <div className="story-photo relative shrink-0 overflow-hidden bg-muted">
             {currentScene && currentScene.images.length > 0 ? (
               <>
                 {currentScene.images.map((src, i) => (
@@ -477,7 +621,7 @@ export function TripStory({ tripId }: { tripId: string }) {
           </div>
 
           {/* Details (scrollable) */}
-          <div className="flex-1 overflow-y-auto p-5 lg:min-h-0">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {currentScene ? (
               <>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -608,10 +752,10 @@ export function TripStory({ tripId }: { tripId: string }) {
         </div>
 
         {/* RIGHT: map */}
-        <div className="relative w-full lg:flex-1">
+        <div className="story-mapwrap relative w-full">
           <div
             ref={containerRef}
-            className="h-72 w-full lg:h-[68vh] lg:min-h-[540px]"
+            className="story-map w-full"
           />
 
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3">
@@ -623,18 +767,20 @@ export function TripStory({ tripId }: { tripId: string }) {
                   : "The end"}{" "}
               · {story.destination}
             </span>
-            <button
-              onClick={() => {
-                window.speechSynthesis?.cancel()
-                setStory(null)
-                setStarted(false)
-                setPlaying(false)
-              }}
-              className="pointer-events-auto grid size-9 place-items-center rounded-full bg-black/55 text-white backdrop-blur-md hover:bg-black/70"
-              aria-label="Close"
-            >
-              <X className="size-4" />
-            </button>
+            {!publicMode && (
+              <button
+                onClick={() => {
+                  window.speechSynthesis?.cancel()
+                  setStory(null)
+                  setStarted(false)
+                  setPlaying(false)
+                }}
+                className="pointer-events-auto grid size-9 place-items-center rounded-full bg-black/55 text-white backdrop-blur-md hover:bg-black/70"
+                aria-label="Close"
+              >
+                <X className="size-4" />
+              </button>
+            )}
           </div>
 
           {!started && (
